@@ -1,4 +1,5 @@
-import { ITEM_TYPES, EMOTION_TAGS, type ItemType, type EmotionTag, type ItemMetadata } from '../types';
+import { useState } from 'react';
+import { ITEM_TYPE_PRESETS, CUSTOM_ITEM_TYPE, EMOTION_TAGS, type EmotionTag, type ItemMetadata } from '../types';
 import LocationAutocomplete from './LocationAutocomplete';
 import { metadataInputStyle } from './formStyles';
 
@@ -19,11 +20,28 @@ export default function ItemMetadataForm({
   onChange: (next: ItemMetadata) => void;
   nameRequired?: boolean;
 }) {
+  // Whether the current type is a free-typed custom value rather than one of
+  // the presets. Initialized once from the incoming value (e.g. an existing
+  // item's saved type) and only flipped afterwards by explicit user action —
+  // this component remounts fresh whenever the parent switches which item
+  // it's editing (see HomePage's conditional render), so this stays in sync.
+  const [customType, setCustomType] = useState(() => !ITEM_TYPE_PRESETS.some((p) => p.value === value.type));
+
   function toggleTag(tag: EmotionTag) {
     const emotionTags = value.emotionTags.includes(tag)
       ? value.emotionTags.filter((t) => t !== tag)
       : [...value.emotionTags, tag];
     onChange({ ...value, emotionTags });
+  }
+
+  function handleTypeSelect(next: string) {
+    if (next === CUSTOM_ITEM_TYPE) {
+      setCustomType(true);
+      onChange({ ...value, type: '' });
+    } else {
+      setCustomType(false);
+      onChange({ ...value, type: next });
+    }
   }
 
   return (
@@ -41,13 +59,27 @@ export default function ItemMetadataForm({
 
       <label style={{ fontSize: 12, color: '#888' }}>
         Type
-        <select value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value as ItemType })} style={metadataInputStyle}>
-          {ITEM_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
+        <select
+          value={customType ? CUSTOM_ITEM_TYPE : value.type}
+          onChange={(e) => handleTypeSelect(e.target.value)}
+          style={metadataInputStyle}
+        >
+          {ITEM_TYPE_PRESETS.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
             </option>
           ))}
+          <option value={CUSTOM_ITEM_TYPE}>Custom… (自訂類別)</option>
         </select>
+        {customType && (
+          <input
+            type="text"
+            value={value.type}
+            onChange={(e) => onChange({ ...value, type: e.target.value })}
+            placeholder="Type your own category… (自訂類別名稱)"
+            style={{ ...metadataInputStyle, marginTop: 6 }}
+          />
+        )}
       </label>
 
       <label style={{ fontSize: 12, color: '#888' }}>

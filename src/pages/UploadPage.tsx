@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { signOut, type User } from 'firebase/auth';
-import { auth } from '../firebase';
+import type { User } from 'firebase/auth';
 import { generate3DModel, pollTaskUntilDone, modelProxyUrl } from '../services/tripoClient';
+import { generateStickerFromFile } from '../services/stickerClient';
 import { saveItem } from '../services/items';
 import ModelViewer from '../components/ModelViewer';
 import ProgressBar from '../components/ProgressBar';
@@ -66,10 +66,26 @@ export default function UploadPage({ user }: { user: User }) {
       const trimmedMetadata: ItemMetadata = {
         ...metadata,
         name: metadata.name.trim(),
+        // Custom type left blank (e.g. user picked "Custom…" then didn't type
+        // anything) falls back to "Other" rather than saving an empty type.
+        type: metadata.type.trim() || 'Other',
         location: metadata.location.trim(),
         story: metadata.story.trim(),
       };
-      await saveItem(user.uid, photoFiles, modelBlob, trimmedMetadata, setSaveStage);
+
+      // AI sticker generation (gpt-image-2) is a best-effort enhancement —
+      // if it fails for any reason (bad key, rate limit, OpenAI outage), we
+      // log it and continue saving with no sticker rather than blocking the
+      // save. The Collection grid falls back to the real photo in that case.
+      let stickerBlob: Blob | null = null;
+      setSaveStage('Generating AI sticker…');
+      try {
+        stickerBlob = await generateStickerFromFile(photoFiles[0], trimmedMetadata.name, trimmedMetadata.type);
+      } catch (stickerErr) {
+        console.warn('AI sticker generation failed, falling back to photo thumbnail:', stickerErr);
+      }
+
+      await saveItem(user.uid, photoFiles, modelBlob, trimmedMetadata, setSaveStage, stickerBlob);
       setStatus('saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save item');
@@ -90,10 +106,7 @@ export default function UploadPage({ user }: { user: User }) {
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: 20 }}>3D Texture Test</h1>
-        <button onClick={() => signOut(auth)}>Sign out</button>
-      </div>
+      <h1 style={{ fontSize: 20 }}>3D Texture Test</h1>
       <p style={{ color: '#888' }}>Logged in as {user.email}</p>
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>1. Upload photos (front + at least 1 more angle required)</h2>

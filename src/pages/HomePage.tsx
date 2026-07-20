@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { getItems, updateItemMetadata } from '../services/items';
+import { getItems, updateItemMetadata, updateItemSticker, deleteItem } from '../services/items';
 import { modelProxyUrl } from '../services/tripoClient';
+import { generateStickerFromUrl } from '../services/stickerClient';
 import ModelViewer from '../components/ModelViewer';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { Item, ItemMetadata } from '../types';
@@ -26,6 +27,10 @@ export default function HomePage({ user }: { user: User }) {
   const [editValue, setEditValue] = useState<ItemMetadata>(emptyItemMetadata);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [generatingSticker, setGeneratingSticker] = useState(false);
+  const [stickerError, setStickerError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +54,25 @@ export default function HomePage({ user }: { user: User }) {
     setSelected(item);
     setEditing(false);
     setEditError(null);
+    setDeleteError(null);
+    setStickerError(null);
+  }
+
+  async function handleGenerateSticker() {
+    if (!selected || !selected.photos?.[0]) return;
+    setGeneratingSticker(true);
+    setStickerError(null);
+    try {
+      const blob = await generateStickerFromUrl(selected.photos[0], selected.name ?? '', selected.type ?? '');
+      const stickerUrl = await updateItemSticker(selected, blob);
+      const updated = { ...selected, stickerUrl };
+      setSelected(updated);
+      setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
+    } catch (err) {
+      setStickerError(err instanceof Error ? err.message : 'Failed to generate AI sticker');
+    } finally {
+      setGeneratingSticker(false);
+    }
   }
 
   function startEdit() {
@@ -66,6 +90,9 @@ export default function HomePage({ user }: { user: User }) {
       const trimmed: ItemMetadata = {
         ...editValue,
         name: editValue.name.trim(),
+        // Custom type left blank (e.g. user picked "Custom…" then didn't type
+        // anything) falls back to "Other" rather than saving an empty type.
+        type: editValue.type.trim() || 'Other',
         location: editValue.location.trim(),
         story: editValue.story.trim(),
       };
@@ -78,6 +105,27 @@ export default function HomePage({ user }: { user: User }) {
       setEditError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    // PRD 4.5: "Delete: remove item (with confirmation)".
+    const ok = window.confirm(
+      `Delete "${selected.name || 'Untitled item'}"? This removes its photos and 3D model permanently and can't be undone.`
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteItem(selected);
+      setItems((prev) => prev.filter((it) => it.id !== selected.id));
+      selectItem(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete item');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -114,10 +162,22 @@ export default function HomePage({ user }: { user: User }) {
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <h2 style={{ fontSize: 18, margin: 0 }}>{selected.name || 'Untitled item'}</h2>
-                <button onClick={startEdit} style={{ flexShrink: 0 }}>
-                  Edit
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button onClick={startEdit} disabled={deleting}>
+                    Edit
+                  </button>
+                  {selected.photos?.[0] && (
+                    <button onClick={handleGenerateSticker} disabled={generatingSticker || deleting}>
+                      {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
+                    </button>
+                  )}
+                  <button onClick={handleDelete} disabled={deleting} style={{ color: '#e05555' }}>
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
               </div>
+              {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{deleteError}</p>}
+              {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{stickerError}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 12, color: '#888' }}>
                 {selected.type && (
                   <span style={{ border: '1px solid #555', borderRadius: 999, padding: '2px 8px' }}>{selected.type}</span>
@@ -169,9 +229,9 @@ export default function HomePage({ user }: { user: User }) {
                 textAlign: 'left',
               }}
             >
-              {item.photos?.[0] ? (
+              {item.stickerUrl ?? item.photos?.[0] ? (
                 <img
-                  src={item.photos[0]}
+                  src={item.stickerUrl ?? item.photos![0]}
                   alt="item thumbnail"
                   style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
                 />

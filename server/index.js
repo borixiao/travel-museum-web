@@ -18,9 +18,34 @@ const TRIPO_API_KEY = process.env.TRIPO_API_KEY;
 const TRIPO_BASE = 'https://api.tripo3d.ai/v2/openapi';
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const PLACES_BASE = 'https://places.googleapis.com/v1';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_BASE = 'https://api.openai.com/v1';
 
 app.use(cors());
 app.use(express.json());
+
+// Shared SSRF guard for any route that fetches a caller-supplied URL
+// server-side (the GLB proxy below, and the sticker regenerate path, which
+// fetches an existing item's photo from Firebase Storage by URL).
+function isSafeUrl(urlString) {
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return false;
+  }
+  const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+  if (
+    parsed.protocol !== 'https:' ||
+    blockedHosts.includes(parsed.hostname) ||
+    parsed.hostname.startsWith('169.254.') ||
+    parsed.hostname.startsWith('192.168.') ||
+    parsed.hostname.startsWith('10.')
+  ) {
+    return false;
+  }
+  return true;
+}
 
 // Tripo's officially documented accepted formats are JPEG/PNG/TIFF only.
 // Rather than gamble on whatever format the browser/camera produced (webp,
@@ -37,7 +62,24 @@ app.use(express.json());
 async function normalizeForTripo(buffer) {
   return sharp(buffer)
     .rotate() // respect EXIF orientation before any resize
-    .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+    // Downscaled aggressively (was 2048/90) to cut upload time to our server
+    // and onward to Tripo — Tripo's own model-generation compute time is
+    // dominated by their server-side pipeline and isn't meaningfully
+    // shortened by a smaller input, but a smaller file uploads noticeably
+    // faster, which is most of what a visitor perceives as "faster".
+    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 78 })
+    .toBuffer();
+}
+
+// Reference image sent to gpt-image-2's images/edits endpoint for AI sticker
+// generation. Kept smaller than the Tripo reference (1024 vs 2048) since
+// OpenAI bills input images by token count regardless of resolution — there's
+// no quality benefit to sending a larger image, just extra cost.
+async function normalizeForSticker(buffer) {
+  return sharp(buffer)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 90 })
     .toBuffer();
 }
@@ -167,14 +209,7 @@ app.get('/api/model', async (req, res) => {
       return res.status(400).json({ error: 'Missing url query parameter' });
     }
 
-    let parsed;
-    try {
-      parsed = new URL(modelUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid url' });
-    }
-    const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
-    if (parsed.protocol !== 'https:' || blockedHosts.includes(parsed.hostname) || parsed.hostname.startsWith('169.254.') || parsed.hostname.startsWith('192.168.') || parsed.hostname.startsWith('10.')) {
+    if (!isSafeUrl(modelUrl)) {
       return res.status(400).json({ error: 'URL not allowed' });
     }
 
@@ -186,6 +221,84 @@ app.get('/api/model', async (req, res) => {
     res.set('Content-Type', upstream.headers.get('content-type') || 'model/gltf-binary');
     res.set('Access-Control-Allow-Origin', '*');
     upstream.body.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generates a stylized "AI sticker" illustration of an item from its
+// reference photo, using OpenAI's gpt-image-2 image-to-image endpoint
+// (images/edits). This is a best-effort enhancement on the client side — if
+// this route fails, the client falls back to the real photo thumbnail rather
+// than blocking the save/edit flow.
+//
+// Accepts either an uploaded file (new item, saved at the same time as the
+// rest of the item) or a photoUrl (regenerating a sticker for an existing
+// item, where we only have its Storage download URL, not a live File).
+// Exactly one of the two must be provided.
+app.post('/api/sticker', upload.single('photo'), async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY not set on server' });
+    }
+
+    const { photoUrl, name, type } = req.body;
+    const hasFile = !!req.file;
+    const hasUrl = typeof photoUrl === 'string' && photoUrl.length > 0;
+    if (hasFile === hasUrl) {
+      return res.status(400).json({ error: 'Provide exactly one of photo (file) or photoUrl' });
+    }
+
+    let sourceBuffer;
+    if (hasFile) {
+      sourceBuffer = req.file.buffer;
+    } else {
+      if (!isSafeUrl(photoUrl)) {
+        return res.status(400).json({ error: 'photoUrl not allowed' });
+      }
+      const photoRes = await fetch(photoUrl);
+      if (!photoRes.ok) {
+        return res.status(400).json({ error: `Failed to fetch photoUrl: ${photoRes.status}` });
+      }
+      sourceBuffer = Buffer.from(await photoRes.arrayBuffer());
+    }
+
+    const jpegBuffer = await normalizeForSticker(sourceBuffer);
+
+    const prompt = `Turn this photographed travel souvenir into a flat-vector sticker illustration: thick white die-cut border, solid pastel background, vibrant flat colors, single centered object, simple clean shading, no text or watermarks. Item: "${name || ''}" (${type || ''}).`;
+
+    const form = new FormData();
+    form.append('model', 'gpt-image-2');
+    form.append('image[]', jpegBuffer, { filename: 'reference.jpg', contentType: 'image/jpeg' });
+    form.append('prompt', prompt);
+    form.append('size', '1024x1024');
+    form.append('background', 'opaque');
+    form.append('output_format', 'png');
+    form.append('n', '1');
+
+    const upstream = await fetch(`${OPENAI_BASE}/images/edits`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        ...form.getHeaders(),
+      },
+      body: form,
+    });
+
+    const json = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: json.error?.message || 'Sticker generation failed' });
+    }
+
+    const b64 = json.data?.[0]?.b64_json;
+    if (!b64) {
+      return res.status(500).json({ error: 'Sticker generation returned no image data' });
+    }
+
+    const pngBuffer = Buffer.from(b64, 'base64');
+    res.set('Content-Type', 'image/png');
+    res.send(pngBuffer);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
