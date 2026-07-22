@@ -1,32 +1,29 @@
-# React + TypeScript + Vite
+# Travel Memory Museum Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React, TypeScript, and Vite web client for collecting travel objects, generating 2D keepsakes, building textured 3D models, and arranging moodboards.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env.local` and add the public Firebase web configuration.
+3. Copy `server/.env.example` to `server/.env` and add only the server-side keys needed for the features being tested.
+4. Run `npm run dev`, then open `http://localhost:5173`.
 
-## React Compiler
+Never put provider keys in a `VITE_` variable. Vite exposes those variables to the browser bundle.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Add Item modes
 
-## Expanding the Oxlint configuration
+- **2D:** sends one photo through the local server to OpenRouter's `openai/gpt-image-2` model and returns a hand-drawn diary image plus a travel fridge magnet. This requires `OPENROUTER_API_KEY`; each click starts two paid image requests.
+- **3D:** sends two to four object photos through the local server to Tripo and returns a rotatable model. This requires `TRIPO_API_KEY`.
+- **AI sticker:** creates the collection thumbnail through OpenAI's image edit endpoint when `OPENAI_API_KEY` is configured.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Local test mode
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+Set `VITE_API_TEST_MODE=true` in `.env.local` to show **Enter local test mode** on the login page. The bypass exists only in Vite development builds. It opens Add Item without Firebase authentication, disables Firebase saving, and prevents Collection and Moodboard from reading Firebase.
+
+## Checks
+
+```bash
+npm run build
+npm run lint
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.

@@ -12,7 +12,7 @@ const SLOTS: PhotoSlot[] = ['front', 'left', 'back', 'right'];
 
 type Status = 'idle' | 'uploading' | 'generating' | 'preview' | 'error' | 'saving' | 'saved';
 
-export default function UploadPage({ user }: { user: User }) {
+export default function UploadPage({ user, testMode = false }: { user: User; testMode?: boolean }) {
   const [photos, setPhotos] = useState<Partial<Record<PhotoSlot, File>>>({});
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
@@ -108,6 +108,11 @@ export default function UploadPage({ user }: { user: User }) {
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 16px' }}>
       <h1 style={{ fontSize: 20 }}>3D Texture Test</h1>
       <p style={{ color: '#888' }}>Logged in as {user.email}</p>
+      {testMode && (
+        <p style={{ color: '#8a5200', background: '#fff4d6', padding: 10, borderRadius: 6 }}>
+          Local test mode: model generation can be previewed, but Firebase saving is disabled.
+        </p>
+      )}
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>1. Upload photos (front + at least 1 more angle required)</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
@@ -171,8 +176,8 @@ export default function UploadPage({ user }: { user: User }) {
         <div style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: 16 }}>3. Preview (rotate with mouse)</h2>
           <ModelViewer url={modelBlobUrl} />
-          <button onClick={handleSave} disabled={status === 'saving' || status === 'saved'} style={{ marginTop: 12 }}>
-            {status === 'saved' ? 'Saved ✓' : status === 'saving' ? (saveStage ?? 'Saving…') : 'Save to Firebase'}
+          <button onClick={handleSave} disabled={testMode || status === 'saving' || status === 'saved'} style={{ marginTop: 12 }}>
+            {testMode ? 'Firebase save disabled in test mode' : status === 'saved' ? 'Saved ✓' : status === 'saving' ? (saveStage ?? 'Saving…') : 'Save to Firebase'}
           </button>
           {status === 'error' && error && errorStage === 'save' && (
             <div style={{ marginTop: 8 }}>
