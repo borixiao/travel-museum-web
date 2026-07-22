@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 
-export default function LoginPage() {
+export default function LoginPage({ onEnterTestMode }: { onEnterTestMode?: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -58,6 +58,11 @@ export default function LoginPage() {
       >
         {mode === 'login' ? 'Need an account? Register' : 'Have an account? Log in'}
       </button>
+      {onEnterTestMode && (
+        <button type="button" onClick={onEnterTestMode} style={{ marginTop: 12, width: '100%' }}>
+          Enter local test mode
+        </button>
+      )}
     </div>
   );
 }
