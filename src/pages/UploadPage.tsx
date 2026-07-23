@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { generate3DModel, pollTaskUntilDone, modelProxyUrl } from '../services/tripoClient';
+import { generate3DModelWithRetry, isAbortError, MAX_GENERATE_ATTEMPTS, modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromFile } from '../services/stickerClient';
 import { saveItem } from '../services/items';
 import ModelViewer from '../components/ModelViewer';
@@ -21,12 +21,50 @@ export default function UploadPage({ user }: { user: User }) {
   const [modelBlob, setModelBlob] = useState<Blob | null>(null);
   const [saveStage, setSaveStage] = useState<string | null>(null);
   const [errorStage, setErrorStage] = useState<'generate' | 'save' | null>(null);
+  // PRD 7 "Automatic retry (up to 2x) on Tripo3D generation failure" —
+  // surfaced in the UI so a visitor sees "attempt 2 of 3" rather than the
+  // upload/progress bar appearing to silently restart from 0.
+  const [attempt, setAttempt] = useState(1);
 
   // Item metadata (PRD 4.3 Add Item Screen — item name/type/location/date/story/emotion tags)
   const [metadata, setMetadata] = useState<ItemMetadata>(emptyItemMetadata);
 
+  // PRD 4.3 "Retake a single photo in place" — object URLs for the chosen
+  // File so each slot can show a live thumbnail instead of just a filename.
+  // Kept in a ref (mirroring state) purely so the unmount-cleanup effect
+  // below can revoke whatever's current without needing to depend on state.
+  const [photoPreviews, setPhotoPreviews] = useState<Partial<Record<PhotoSlot, string>>>({});
+  const photoPreviewsRef = useRef<Partial<Record<PhotoSlot, string>>>({});
+
+  // PRD 4.4 "Cancel" — the in-flight generation's AbortController, so a
+  // Cancel click can actually interrupt the fetch/poll cycle rather than
+  // just hiding the UI while the request keeps running in the background.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Revoke every still-live preview URL on unmount — object URLs otherwise
+    // leak for the lifetime of the page/tab.
+    return () => {
+      Object.values(photoPreviewsRef.current).forEach((url) => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, []);
+
   function handlePhotoChange(slot: PhotoSlot, file: File | undefined) {
     setPhotos((prev) => ({ ...prev, [slot]: file }));
+    setPhotoPreviews((prev) => {
+      const next = { ...prev };
+      const prevUrl = next[slot];
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      if (file) {
+        next[slot] = URL.createObjectURL(file);
+      } else {
+        delete next[slot];
+      }
+      photoPreviewsRef.current = next;
+      return next;
+    });
   }
 
   async function handleGenerate() {
@@ -34,25 +72,62 @@ export default function UploadPage({ user }: { user: User }) {
     setErrorStage(null);
     setStatus('uploading');
     setProgress(0);
+    setAttempt(1);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
-      const taskId = await generate3DModel(photos);
-      setStatus('generating');
-      const task = await pollTaskUntilDone(taskId, setProgress);
+      const task = await generate3DModelWithRetry(
+        photos,
+        {
+          onAttemptStart: (a) => {
+            setAttempt(a);
+            setStatus('uploading');
+            setProgress(0);
+          },
+          onProgress: (p) => {
+            setStatus('generating');
+            setProgress(p);
+          },
+        },
+        controller.signal,
+      );
       if (task.status !== 'success' || !task.model_url) {
         throw new Error(task.error_msg || 'Generation failed');
       }
 
-      const res = await fetch(modelProxyUrl(task.model_url));
+      const res = await fetch(modelProxyUrl(task.model_url), { signal: controller.signal });
       if (!res.ok) throw new Error('Failed to download generated model');
       const blob = await res.blob();
       setModelBlob(blob);
-      setModelBlobUrl(URL.createObjectURL(blob));
+      // Regenerating from a successful Preview leaves the old model's blob
+      // URL on screen until this new one is ready (see the Preview section
+      // below, which stays mounted through a regenerate), so swap-and-revoke
+      // here rather than revoking eagerly at the start of the attempt —
+      // otherwise the still-visible <model-viewer> would lose its source
+      // mid-regeneration.
+      setModelBlobUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
+        return URL.createObjectURL(blob);
+      });
       setStatus('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-      setErrorStage('generate');
-      setStatus('error');
+      if (isAbortError(err)) {
+        // A deliberate Cancel click — not an error, just back to idle so the
+        // user can adjust photos/details and try again from scratch.
+        setStatus('idle');
+        setProgress(0);
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong');
+        setErrorStage('generate');
+        setStatus('error');
+      }
+    } finally {
+      abortControllerRef.current = null;
     }
+  }
+
+  function handleCancelGenerate() {
+    abortControllerRef.current?.abort();
   }
 
   async function handleSave() {
@@ -102,7 +177,8 @@ export default function UploadPage({ user }: { user: User }) {
   // (confirmed via direct API testing) — not a quality nicety, a hard floor.
   const hasMinPhotos = photoCount >= 2;
   const hasName = metadata.name.trim().length > 0;
-  const canGenerate = hasFront && hasMinPhotos && hasName && status !== 'uploading' && status !== 'generating';
+  const isGenerating = status === 'uploading' || status === 'generating';
+  const canGenerate = hasFront && hasMinPhotos && hasName && !isGenerating;
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 16px' }}>
@@ -111,20 +187,69 @@ export default function UploadPage({ user }: { user: User }) {
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>1. Upload photos (front + at least 1 more angle required)</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        {SLOTS.map((slot) => (
-          <label key={slot} style={{ border: '1px dashed #666', padding: 8, borderRadius: 6, textAlign: 'center', cursor: 'pointer' }}>
-            <div style={{ fontSize: 12, marginBottom: 4 }}>{slot}{slot === 'front' ? ' (required)' : ''}</div>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={(e) => handlePhotoChange(slot, e.target.files?.[0])}
-            />
-            <div style={{ fontSize: 11, color: photos[slot] ? '#6ea8ff' : '#888' }}>
-              {photos[slot] ? photos[slot]!.name : 'Choose file'}
+        {SLOTS.map((slot) => {
+          const inputId = `photo-slot-${slot}`;
+          const preview = photoPreviews[slot];
+          return (
+            // Outer div is a plain positioning container, NOT a <label> —
+            // the "×" clear button below is a sibling of the <label>, not a
+            // descendant of it. Nesting the button inside the label would
+            // risk the browser's native label→input click-forwarding still
+            // opening the file picker even with stopPropagation() on the
+            // button's own click handler.
+            <div key={slot} style={{ position: 'relative', border: '1px dashed #666', borderRadius: 6, overflow: 'hidden' }}>
+              <label
+                htmlFor={inputId}
+                style={{ display: 'block', padding: 8, textAlign: 'center', cursor: 'pointer' }}
+              >
+                <div style={{ fontSize: 12, marginBottom: 4 }}>{slot}{slot === 'front' ? ' (required)' : ''}</div>
+                <input
+                  id={inputId}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => handlePhotoChange(slot, e.target.files?.[0])}
+                />
+                {preview ? (
+                  <>
+                    <img
+                      src={preview}
+                      alt={`${slot} preview`}
+                      style={{ width: '100%', height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                    />
+                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>Tap to retake</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#888' }}>Choose file</div>
+                )}
+              </label>
+              {preview && (
+                <button
+                  type="button"
+                  onClick={() => handlePhotoChange(slot, undefined)}
+                  aria-label={`Clear ${slot} photo`}
+                  style={{
+                    position: 'absolute',
+                    top: 4,
+                    right: 4,
+                    width: 20,
+                    height: 20,
+                    lineHeight: '18px',
+                    padding: 0,
+                    borderRadius: '50%',
+                    border: '1px solid #666',
+                    background: '#222',
+                    color: '#ddd',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
-          </label>
-        ))}
+          );
+        })}
       </div>
 
       {!hasFront && (
@@ -154,8 +279,20 @@ export default function UploadPage({ user }: { user: User }) {
 
       {(status === 'uploading' || status === 'generating') && (
         <div style={{ marginTop: 12 }}>
-          <p style={{ marginBottom: 4 }}>{status === 'uploading' ? 'Uploading photos…' : `Generating… ${progress}%`}</p>
+          <p style={{ marginBottom: 4 }}>
+            {status === 'uploading' ? 'Uploading photos…' : `Generating… ${progress}%`}
+            {attempt > 1 && (
+              <span style={{ color: '#e0a030' }}> (retry {attempt - 1}/{MAX_GENERATE_ATTEMPTS - 1})</span>
+            )}
+          </p>
           <ProgressBar progress={status === 'generating' ? progress : undefined} />
+          {/* PRD 4.4 "Cancel" — aborts the in-flight fetch/poll cycle via
+              AbortController rather than merely hiding this UI, so a
+              cancelled generation doesn't keep burning Tripo API calls in
+              the background. */}
+          <button onClick={handleCancelGenerate} style={{ marginTop: 8 }}>
+            Cancel
+          </button>
         </div>
       )}
       {status === 'error' && error && errorStage === 'generate' && (
@@ -171,9 +308,23 @@ export default function UploadPage({ user }: { user: User }) {
         <div style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: 16 }}>3. Preview (rotate with mouse)</h2>
           <ModelViewer url={modelBlobUrl} />
-          <button onClick={handleSave} disabled={status === 'saving' || status === 'saved'} style={{ marginTop: 12 }}>
-            {status === 'saved' ? 'Saved ✓' : status === 'saving' ? (saveStage ?? 'Saving…') : 'Save to Firebase'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button onClick={handleSave} disabled={status === 'saving' || status === 'saved' || isGenerating}>
+              {status === 'saved' ? 'Saved ✓' : status === 'saving' ? (saveStage ?? 'Saving…') : 'Save to Firebase'}
+            </button>
+            {/* PRD 4.4 "Regenerate from Preview" — re-submits the same
+                photos as a brand-new generation without starting the whole
+                flow over, for when the model saved fine technically but
+                isn't a satisfying result. Distinct from the "Try again"
+                button below, which only appears after a failed generation;
+                this one is available right on a *successful* preview.
+                Disabled once saving/saved (nothing left worth regenerating
+                for) or while a regenerate is already in flight (canGenerate
+                already covers that via isGenerating). */}
+            <button onClick={handleGenerate} disabled={!canGenerate || status === 'saving' || status === 'saved'}>
+              {isGenerating ? 'Regenerating…' : 'Regenerate'}
+            </button>
+          </div>
           {status === 'error' && error && errorStage === 'save' && (
             <div style={{ marginTop: 8 }}>
               <p style={{ color: 'crimson' }}>{error}</p>

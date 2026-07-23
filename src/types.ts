@@ -62,6 +62,13 @@ export interface MoodboardCard {
   y: number;
   w: number;
   rotation: number;
+  /** Which representation an 'item' card shows while arranging — 'sticker'
+   *  (or unset, for backward compatibility with cards saved before this
+   *  field existed) shows the flat photoUrl thumbnail; 'model' shows a
+   *  passive, non-interactive auto-rotating 3D preview instead. Only
+   *  meaningful when modelUrl is present — the toggle button itself is
+   *  hidden otherwise. */
+  displayMode?: 'sticker' | 'model';
   // type: 'item' fields — a snapshot taken at the time the card was added,
   // not a live reference, so a later edit/delete of the source item doesn't
   // change (or break) an already-published board. This also has to be a full
@@ -90,8 +97,26 @@ export interface Moodboard {
   title: string;
   published: boolean;
   cards: MoodboardCard[];
+  /** Canvas background color (CSS hex string). Optional so boards created
+   *  before this field existed fall back to the canvas's own default. */
+  backgroundColor?: string;
   createdAt: unknown;
   updatedAt: unknown;
+}
+
+// PRD §6 data model / §4.2 "Welcome, {name}" banner. Created eagerly on
+// registration (see LoginPage.tsx) and lazily backfilled for accounts that
+// predate this feature (see getOrCreateUserProfile in services/users.ts) so
+// every logged-in user always has a doc here by the time HomePage reads it.
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  /** Profile avatar — optional so accounts that never uploaded one (the
+   *  vast majority, since this was added well after registration existed)
+   *  fall back to an initials placeholder in the UI. */
+  photoURL?: string;
+  createdAt: unknown;
 }
 
 export type PhotoSlot = 'front' | 'left' | 'back' | 'right';

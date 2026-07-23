@@ -48,7 +48,12 @@ export default function MoodboardViewPage() {
   return (
     <div style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
       <h1 style={{ fontSize: 20 }}>{moodboard.title}</h1>
-      <MoodboardCanvas cards={moodboard.cards} editable={false} onExpand={setExpandedCard} />
+      <MoodboardCanvas
+        cards={moodboard.cards}
+        backgroundColor={moodboard.backgroundColor}
+        editable={false}
+        onExpand={setExpandedCard}
+      />
       {expandedCard && <MoodboardCardDetailModal card={expandedCard} onClose={() => setExpandedCard(null)} />}
     </div>
   );

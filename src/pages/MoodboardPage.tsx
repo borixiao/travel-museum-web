@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { getItems } from '../services/items';
-import { getOrCreateMoodboard, saveMoodboardCards, setMoodboardPublished, setMoodboardTitle } from '../services/moodboard';
+import {
+  DEFAULT_MOODBOARD_BACKGROUND,
+  getOrCreateMoodboard,
+  nextMoodboardCardPosition,
+  saveMoodboardCards,
+  setMoodboardBackgroundColor,
+  setMoodboardPublished,
+  setMoodboardTitle,
+} from '../services/moodboard';
 import MoodboardCanvas from '../components/MoodboardCanvas';
 import MoodboardCardDetailModal from '../components/MoodboardCardDetailModal';
 import type { Item, Moodboard, MoodboardCard } from '../types';
-
-// Items are laid onto a loose 4-column grid when first added (before the
-// user drags them anywhere) just so multiple adds don't all stack exactly
-// on top of each other.
-const GRID_COLS = 4;
-const GRID_STEP_X = 22;
-const GRID_STEP_Y = 26;
 
 export default function MoodboardPage({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,8 @@ export default function MoodboardPage({ user }: { user: User }) {
   // Mirrors `cards` so drag-end / blur handlers can read the latest value
   // synchronously without waiting on the next render (setState is async).
   const cardsRef = useRef<MoodboardCard[]>([]);
+  // Debounces the background-color Firestore write — see handleBackgroundColorChange.
+  const bgColorSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,22 +75,50 @@ export default function MoodboardPage({ user }: { user: User }) {
     updateCards((prev) => prev.map((c) => (c.id === id ? { ...c, x, y } : c)), { save: false });
   }
 
-  function handleDragEnd() {
+  function handleRotate(id: string, rotation: number) {
+    updateCards((prev) => prev.map((c) => (c.id === id ? { ...c, rotation } : c)), { save: false });
+  }
+
+  function handleResize(id: string, w: number) {
+    updateCards((prev) => prev.map((c) => (c.id === id ? { ...c, w } : c)), { save: false });
+  }
+
+  // Discrete click (not a drag gesture), so this saves immediately like
+  // addItemCard/removeCard rather than deferring to a drag-end handler.
+  function handleToggleDisplayMode(id: string) {
+    updateCards((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, displayMode: c.displayMode === 'model' ? 'sticker' : 'model' } : c)),
+    );
+  }
+
+  // Fires once at the end of a move or rotate gesture that actually changed
+  // something (MoodboardCanvas only calls this when a drag crossed the tap
+  // threshold, or on any rotate release). Bringing the just-touched card to
+  // the end of `cards` (= rendered on top, since cards are absolutely
+  // positioned in array order) is what makes deliberate overlap possible —
+  // "the thing I'm arranging right now should come out on top", the same
+  // way picking something up off a real corkboard and re-pinning it does.
+  function handleDragEnd(id?: string) {
     if (!moodboard) return;
-    saveMoodboardCards(moodboard.id, cardsRef.current).catch((err) => {
+    let next = cardsRef.current;
+    if (id) {
+      const idx = next.findIndex((c) => c.id === id);
+      if (idx !== -1 && idx !== next.length - 1) {
+        const reordered = [...next];
+        const [card] = reordered.splice(idx, 1);
+        reordered.push(card);
+        next = reordered;
+        cardsRef.current = next;
+        setCards(next);
+      }
+    }
+    saveMoodboardCards(moodboard.id, next).catch((err) => {
       setError(err instanceof Error ? err.message : 'Failed to save layout');
     });
   }
 
-  function nextGridSpot() {
-    const count = cardsRef.current.length;
-    const col = count % GRID_COLS;
-    const row = Math.floor(count / GRID_COLS);
-    return { x: 4 + col * GRID_STEP_X, y: 4 + row * GRID_STEP_Y };
-  }
-
   function addItemCard(item: Item) {
-    const { x, y } = nextGridSpot();
+    const { x, y } = nextMoodboardCardPosition(cardsRef.current.length);
     const newCard: MoodboardCard = {
       id: crypto.randomUUID(),
       type: 'item',
@@ -112,7 +143,7 @@ export default function MoodboardPage({ user }: { user: User }) {
   }
 
   function addTextCard() {
-    const { x, y } = nextGridSpot();
+    const { x, y } = nextMoodboardCardPosition(cardsRef.current.length);
     const newCard: MoodboardCard = {
       id: crypto.randomUUID(),
       type: 'text',
@@ -164,6 +195,24 @@ export default function MoodboardPage({ user }: { user: User }) {
     }
   }
 
+  function handleBackgroundColorChange(color: string) {
+    if (!moodboard) return;
+    // Optimistic + local first so the canvas preview updates instantly as
+    // the user drags inside the native color picker.
+    setMoodboard((m) => (m ? { ...m, backgroundColor: color } : m));
+    // Same "don't spam writes during continuous interaction" concern as
+    // card dragging (see updateCards's save:false) — a native color input
+    // can fire many onChange events while the picker is being dragged, so
+    // debounce the actual Firestore write instead of saving every one.
+    if (bgColorSaveTimeout.current) clearTimeout(bgColorSaveTimeout.current);
+    const moodboardId = moodboard.id;
+    bgColorSaveTimeout.current = setTimeout(() => {
+      setMoodboardBackgroundColor(moodboardId, color).catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to save background color');
+      });
+    }, 400);
+  }
+
   function handleCopyLink() {
     if (!moodboard) return;
     const url = `${window.location.origin}/m/${moodboard.id}`;
@@ -201,17 +250,27 @@ export default function MoodboardPage({ user }: { user: User }) {
         Curate items into a shareable exhibition board — drag cards to arrange them, then publish a link visitors can view without logging in.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0' }}>
         <button onClick={addTextCard}>+ Add text</button>
         <button onClick={handleTogglePublish} disabled={publishing}>
           {publishing ? 'Saving…' : moodboard.published ? 'Unpublish' : 'Publish'}
         </button>
         {moodboard.published && <button onClick={handleCopyLink}>Copy public link</button>}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#888' }}>
+          Background
+          <input
+            type="color"
+            value={moodboard.backgroundColor ?? DEFAULT_MOODBOARD_BACKGROUND}
+            onChange={(e) => handleBackgroundColorChange(e.target.value)}
+            style={{ width: 28, height: 28, padding: 0, border: '1px solid #444', borderRadius: 4, background: 'none', cursor: 'pointer' }}
+          />
+        </label>
       </div>
       {copyMessage && <p style={{ fontSize: 12, color: '#6ea8ff', wordBreak: 'break-all' }}>{copyMessage}</p>}
 
       <MoodboardCanvas
         cards={cards}
+        backgroundColor={moodboard.backgroundColor}
         editable
         onMove={handleMove}
         onDragEnd={handleDragEnd}
@@ -219,6 +278,9 @@ export default function MoodboardPage({ user }: { user: User }) {
         onTextChange={handleTextChange}
         onTextBlur={handleTextBlur}
         onExpand={setExpandedCard}
+        onRotate={handleRotate}
+        onResize={handleResize}
+        onToggleDisplayMode={handleToggleDisplayMode}
       />
       {expandedCard && <MoodboardCardDetailModal card={expandedCard} onClose={() => setExpandedCard(null)} />}
 
