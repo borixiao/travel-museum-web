@@ -3,10 +3,12 @@ import type { User } from 'firebase/auth';
 import { getItems } from '../services/items';
 import {
   DEFAULT_MOODBOARD_BACKGROUND,
+  clearMoodboardBackgroundImage,
   getOrCreateMoodboard,
   nextMoodboardCardPosition,
   saveMoodboardCards,
   setMoodboardBackgroundColor,
+  setMoodboardBackgroundImage,
   setMoodboardPublished,
   setMoodboardTitle,
 } from '../services/moodboard';
@@ -24,6 +26,8 @@ export default function MoodboardPage({ user }: { user: User }) {
   const [publishing, setPublishing] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<MoodboardCard | null>(null);
+  const [savingBackgroundImage, setSavingBackgroundImage] = useState(false);
+  const [backgroundImageError, setBackgroundImageError] = useState<string | null>(null);
 
   // Mirrors `cards` so drag-end / blur handlers can read the latest value
   // synchronously without waiting on the next render (setState is async).
@@ -213,6 +217,34 @@ export default function MoodboardPage({ user }: { user: User }) {
     }, 400);
   }
 
+  async function handleBackgroundImageChange(file: File | undefined) {
+    if (!moodboard || !file) return;
+    setSavingBackgroundImage(true);
+    setBackgroundImageError(null);
+    try {
+      const backgroundImageUrl = await setMoodboardBackgroundImage(user.uid, moodboard.id, file);
+      setMoodboard((m) => (m ? { ...m, backgroundImageUrl } : m));
+    } catch (err) {
+      setBackgroundImageError(err instanceof Error ? err.message : 'Failed to upload background image');
+    } finally {
+      setSavingBackgroundImage(false);
+    }
+  }
+
+  async function handleRemoveBackgroundImage() {
+    if (!moodboard) return;
+    setSavingBackgroundImage(true);
+    setBackgroundImageError(null);
+    try {
+      await clearMoodboardBackgroundImage(user.uid, moodboard.id);
+      setMoodboard((m) => (m ? { ...m, backgroundImageUrl: undefined } : m));
+    } catch (err) {
+      setBackgroundImageError(err instanceof Error ? err.message : 'Failed to remove background image');
+    } finally {
+      setSavingBackgroundImage(false);
+    }
+  }
+
   function handleCopyLink() {
     if (!moodboard) return;
     const url = `${window.location.origin}/m/${moodboard.id}`;
@@ -265,12 +297,32 @@ export default function MoodboardPage({ user }: { user: User }) {
             style={{ width: 28, height: 28, padding: 0, border: '1px solid #444', borderRadius: 4, background: 'none', cursor: 'pointer' }}
           />
         </label>
+        <label style={{ fontSize: 12, color: '#888', cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
+          {savingBackgroundImage ? 'Saving…' : moodboard.backgroundImageUrl ? 'Change image' : 'Upload background image'}
+          <input
+            type="file"
+            accept="image/*"
+            disabled={savingBackgroundImage}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              handleBackgroundImageChange(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        {moodboard.backgroundImageUrl && (
+          <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
+            Remove image
+          </button>
+        )}
       </div>
+      {backgroundImageError && <p style={{ fontSize: 12, color: 'crimson' }}>{backgroundImageError}</p>}
       {copyMessage && <p style={{ fontSize: 12, color: '#6ea8ff', wordBreak: 'break-all' }}>{copyMessage}</p>}
 
       <MoodboardCanvas
         cards={cards}
         backgroundColor={moodboard.backgroundColor}
+        backgroundImageUrl={moodboard.backgroundImageUrl}
         editable
         onMove={handleMove}
         onDragEnd={handleDragEnd}

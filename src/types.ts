@@ -46,6 +46,9 @@ export interface Item extends Partial<ItemMetadata> {
    *  photos[0] wherever it's missing (generation failure, or item saved
    *  before this feature existed). */
   stickerUrl?: string;
+  /** Custom uploaded image shown behind the item's 3D model in ModelViewer,
+   *  in place of the viewer's plain white default. */
+  backgroundImageUrl?: string;
   createdAt: unknown;
 }
 
@@ -100,6 +103,9 @@ export interface Moodboard {
   /** Canvas background color (CSS hex string). Optional so boards created
    *  before this field existed fall back to the canvas's own default. */
   backgroundColor?: string;
+  /** Custom uploaded background image, takes priority over backgroundColor
+   *  when set. Field is removed entirely when the user removes the image. */
+  backgroundImageUrl?: string;
   createdAt: unknown;
   updatedAt: unknown;
 }

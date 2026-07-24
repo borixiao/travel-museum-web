@@ -45,6 +45,7 @@ export default function MoodboardCanvas({
   cards,
   editable,
   backgroundColor,
+  backgroundImageUrl,
   onMove,
   onDragEnd,
   onRemove,
@@ -60,6 +61,9 @@ export default function MoodboardCanvas({
   /** Falls back to the same default a freshly-created moodboard is seeded
    *  with, so boards saved before this field existed render identically. */
   backgroundColor?: string;
+  /** Custom uploaded background image — takes priority over backgroundColor
+   *  when set (see MoodboardPage's background image upload). */
+  backgroundImageUrl?: string;
   onMove?: (id: string, x: number, y: number) => void;
   // Called once at the end of a move, rotate, or resize gesture that
   // actually changed something — the id lets the caller bring that card to
@@ -230,7 +234,9 @@ export default function MoodboardCanvas({
         position: 'relative',
         width: '100%',
         aspectRatio: CANVAS_ASPECT_RATIO,
-        background: backgroundColor ?? DEFAULT_MOODBOARD_BACKGROUND,
+        ...(backgroundImageUrl
+          ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+          : { background: backgroundColor ?? DEFAULT_MOODBOARD_BACKGROUND }),
         border: '1px solid #444',
         borderRadius: 8,
         overflow: 'hidden',

@@ -25,9 +25,13 @@ export default function ModelViewer({
   fallbackMessage,
   interactive = true,
   height = 480,
+  backgroundImageUrl,
 }: {
   url: string;
   fallbackMessage?: string;
+  /** Custom image shown behind the model instead of the plain white default
+   *  (see Item.backgroundImageUrl / the Item Detail "background image" upload). */
+  backgroundImageUrl?: string;
   // Moodboard cards embed this as a passive preview (Sticker/3D toggle) while
   // still sitting inside the card's own move/rotate/resize pointer-capture
   // drag system — OrbitControls' pointer-drag camera control would otherwise
@@ -43,7 +47,17 @@ export default function ModelViewer({
 }) {
   return (
     <ModelErrorBoundary fallbackMessage={fallbackMessage}>
-      <div style={{ width: '100%', height, background: '#ffffff', borderRadius: 8, pointerEvents: interactive ? 'auto' : 'none' }}>
+      <div
+        style={{
+          width: '100%',
+          height,
+          borderRadius: 8,
+          pointerEvents: interactive ? 'auto' : 'none',
+          ...(backgroundImageUrl
+            ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : { background: '#ffffff' }),
+        }}
+      >
         <Canvas camera={{ position: [0, 0, 3], fov: 45 }}>
           <Suspense fallback={null}>
             <Stage environment="city" intensity={1}>

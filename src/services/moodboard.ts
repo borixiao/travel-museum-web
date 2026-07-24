@@ -1,5 +1,6 @@
-import { collection, addDoc, doc, getDoc, updateDoc, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, addDoc, doc, getDoc, updateDoc, getDocs, query, where, limit, serverTimestamp, deleteField } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import type { Item, Moodboard, MoodboardCard } from '../types';
 
 // Items are laid onto a loose 4-column grid when first added (before the
@@ -99,6 +100,25 @@ export async function setMoodboardPublished(moodboardId: string, published: bool
 
 export async function setMoodboardBackgroundColor(moodboardId: string, backgroundColor: string): Promise<void> {
   await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundColor, updatedAt: serverTimestamp() });
+}
+
+// Stored at `moodboards/{userId}/background` (not keyed by moodboardId)
+// since there's only ever one moodboard per user — mirrors the
+// `users/{uid}/avatar` Storage path pattern so the same "first segment is
+// the owner's uid" Storage rule shape covers this too.
+export async function setMoodboardBackgroundImage(userId: string, moodboardId: string, file: File): Promise<string> {
+  const imageRef = ref(storage, `moodboards/${userId}/background`);
+  await uploadBytes(imageRef, file);
+  const backgroundImageUrl = await getDownloadURL(imageRef);
+  await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundImageUrl, updatedAt: serverTimestamp() });
+  return backgroundImageUrl;
+}
+
+export async function clearMoodboardBackgroundImage(userId: string, moodboardId: string): Promise<void> {
+  await deleteObject(ref(storage, `moodboards/${userId}/background`)).catch(() => {
+    // Best-effort — nothing to clean up if it was never uploaded.
+  });
+  await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundImageUrl: deleteField(), updatedAt: serverTimestamp() });
 }
 
 /**

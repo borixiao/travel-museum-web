@@ -51,6 +51,7 @@ export default function MoodboardViewPage() {
       <MoodboardCanvas
         cards={moodboard.cards}
         backgroundColor={moodboard.backgroundColor}
+        backgroundImageUrl={moodboard.backgroundImageUrl}
         editable={false}
         onExpand={setExpandedCard}
       />

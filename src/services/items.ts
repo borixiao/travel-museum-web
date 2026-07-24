@@ -1,4 +1,4 @@
-import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, deleteField, getDocs, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import type { Item, ItemMetadata } from '../types';
@@ -79,6 +79,28 @@ export async function updateItemSticker(item: Item, stickerBlob: Blob): Promise<
 }
 
 /**
+ * Uploads (or replaces) the custom background image shown behind this item's
+ * 3D model in ModelViewer. Fixed path (no extension, like the avatar path in
+ * users.ts) so re-uploading overwrites the previous one instead of leaving
+ * orphaned files. Falls under the same `items/{userId}/**` Storage rule as
+ * photos/model/sticker, so no separate Storage rule is needed for this.
+ */
+export async function setItemBackgroundImage(item: Item, file: File): Promise<string> {
+  const backgroundRef = ref(storage, `items/${item.userId}/${item.id}/background`);
+  await uploadBytes(backgroundRef, file);
+  const backgroundImageUrl = await getDownloadURL(backgroundRef);
+  await updateDoc(doc(db, 'items', item.id), { backgroundImageUrl });
+  return backgroundImageUrl;
+}
+
+export async function clearItemBackgroundImage(item: Item): Promise<void> {
+  await deleteObject(ref(storage, `items/${item.userId}/${item.id}/background`)).catch(() => {
+    // Best-effort — nothing to clean up if it was never uploaded.
+  });
+  await updateDoc(doc(db, 'items', item.id), { backgroundImageUrl: deleteField() });
+}
+
+/**
  * Deletes an item (PRD 4.5 Item Detail Screen "Delete: remove item, with
  * confirmation" — the confirmation itself is handled by the caller/UI).
  * Removes the Firestore doc and best-effort cleans up its Storage files
@@ -92,7 +114,9 @@ export async function updateItemSticker(item: Item, stickerBlob: Blob): Promise<
 export async function deleteItem(item: Item): Promise<void> {
   // legacyModelUrl is a third-party (Tripo) URL, not a file in our Storage
   // bucket — nothing to delete there, so it's excluded.
-  const fileUrls = [...(item.photos ?? []), item.modelUrl, item.stickerUrl].filter((url): url is string => !!url);
+  const fileUrls = [...(item.photos ?? []), item.modelUrl, item.stickerUrl, item.backgroundImageUrl].filter(
+    (url): url is string => !!url
+  );
 
   await Promise.all(
     fileUrls.map(async (url) => {

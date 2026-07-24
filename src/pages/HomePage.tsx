@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { getItems, updateItemMetadata, updateItemSticker, deleteItem } from '../services/items';
+import {
+  getItems,
+  updateItemMetadata,
+  updateItemSticker,
+  setItemBackgroundImage,
+  clearItemBackgroundImage,
+  deleteItem,
+} from '../services/items';
 import { getOrCreateUserProfile } from '../services/users';
 import { modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromUrl } from '../services/stickerClient';
@@ -34,6 +41,8 @@ export default function HomePage({ user }: { user: User }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [generatingSticker, setGeneratingSticker] = useState(false);
   const [stickerError, setStickerError] = useState<string | null>(null);
+  const [savingBackgroundImage, setSavingBackgroundImage] = useState(false);
+  const [backgroundImageError, setBackgroundImageError] = useState<string | null>(null);
   // PRD 4.5 "Add to Moodboard" action from Item Detail — `addedToMoodboard`
   // is a transient confirmation flag, cleared on the next selectItem() so it
   // never leaks onto a different item.
@@ -138,6 +147,7 @@ export default function HomePage({ user }: { user: User }) {
     setStickerError(null);
     setMoodboardError(null);
     setAddedToMoodboard(false);
+    setBackgroundImageError(null);
   }
 
   async function handleGenerateSticker() {
@@ -154,6 +164,38 @@ export default function HomePage({ user }: { user: User }) {
       setStickerError(err instanceof Error ? err.message : 'Failed to generate AI sticker');
     } finally {
       setGeneratingSticker(false);
+    }
+  }
+
+  async function handleBackgroundImageChange(file: File | undefined) {
+    if (!selected || !file) return;
+    setSavingBackgroundImage(true);
+    setBackgroundImageError(null);
+    try {
+      const backgroundImageUrl = await setItemBackgroundImage(selected, file);
+      const updated = { ...selected, backgroundImageUrl };
+      setSelected(updated);
+      setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
+    } catch (err) {
+      setBackgroundImageError(err instanceof Error ? err.message : 'Failed to upload background image');
+    } finally {
+      setSavingBackgroundImage(false);
+    }
+  }
+
+  async function handleRemoveBackgroundImage() {
+    if (!selected) return;
+    setSavingBackgroundImage(true);
+    setBackgroundImageError(null);
+    try {
+      await clearItemBackgroundImage(selected);
+      const updated = { ...selected, backgroundImageUrl: undefined };
+      setSelected(updated);
+      setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
+    } catch (err) {
+      setBackgroundImageError(err instanceof Error ? err.message : 'Failed to remove background image');
+    } finally {
+      setSavingBackgroundImage(false);
     }
   }
 
@@ -426,9 +468,36 @@ export default function HomePage({ user }: { user: User }) {
             </div>
           )}
 
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12, color: '#888' }}>
+            <label style={{ cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
+              {savingBackgroundImage
+                ? 'Saving…'
+                : selected.backgroundImageUrl
+                  ? 'Change background image'
+                  : 'Upload background image'}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={savingBackgroundImage}
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  handleBackgroundImageChange(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {selected.backgroundImageUrl && (
+              <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
+                Remove image
+              </button>
+            )}
+          </div>
+          {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginBottom: 8 }}>{backgroundImageError}</p>}
+
           <ModelViewer
             url={modelProxyUrl(selected.modelUrl)}
             fallbackMessage="This 3D model is no longer available. Please retake photos and regenerate."
+            backgroundImageUrl={selected.backgroundImageUrl}
           />
         </div>
       ) : displayedItems.length === 0 && items.length > 0 ? (
