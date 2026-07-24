@@ -208,7 +208,20 @@ export default function UploadPage({ user }: { user: User }) {
                   type="file"
                   accept="image/*"
                   style={{ display: 'none' }}
-                  onChange={(e) => handlePhotoChange(slot, e.target.files?.[0])}
+                  onChange={(e) => {
+                    handlePhotoChange(slot, e.target.files?.[0]);
+                    // Reset the native input's own value after every pick.
+                    // Browsers only fire `change` when the input's value
+                    // actually differs from before, and a <input type="file">
+                    // compares by filename/path — so re-selecting the exact
+                    // same file as last time (e.g. re-picking the photo you
+                    // just cleared with the "×" button) silently does nothing
+                    // without this, since as far as the DOM is concerned
+                    // nothing changed. Clearing the value here means the next
+                    // pick always starts from "empty", so `change` reliably
+                    // fires even for the same file twice in a row.
+                    e.target.value = '';
+                  }}
                 />
                 {preview ? (
                   <>
