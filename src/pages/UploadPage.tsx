@@ -3,10 +3,11 @@ import type { User } from 'firebase/auth';
 import { generate3DModelWithRetry, isAbortError, MAX_GENERATE_ATTEMPTS, modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromFile } from '../services/stickerClient';
 import { saveItem } from '../services/items';
+import { getCollections, createCollection } from '../services/collections';
 import ModelViewer from '../components/ModelViewer';
 import ProgressBar from '../components/ProgressBar';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
-import type { PhotoSlot, ItemMetadata } from '../types';
+import type { PhotoSlot, ItemMetadata, Collection } from '../types';
 
 const SLOTS: PhotoSlot[] = ['front', 'left', 'back', 'right'];
 
@@ -29,6 +30,18 @@ export default function UploadPage({ user }: { user: User }) {
   // Item metadata (PRD 4.3 Add Item Screen — item name/type/location/date/story/emotion tags)
   const [metadata, setMetadata] = useState<ItemMetadata>(emptyItemMetadata);
 
+  // PRD 4.2 "My Collections" — lets a new item be filed straight into a
+  // collection at creation time instead of only via the Home screen's
+  // per-item picker afterward. '' means "Uncategorized" (mirrors
+  // moveItemToCollection's null convention, just as a string sentinel since
+  // <select> values are always strings).
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState('');
+  const [creatingCollection, setCreatingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [savingCollection, setSavingCollection] = useState(false);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
+
   // PRD 4.3 "Retake a single photo in place" — object URLs for the chosen
   // File so each slot can show a live thumbnail instead of just a filename.
   // Kept in a ref (mirroring state) purely so the unmount-cleanup effect
@@ -50,6 +63,38 @@ export default function UploadPage({ user }: { user: User }) {
       });
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCollections(user.uid)
+      .then((data) => {
+        if (!cancelled) setCollections(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCollectionsError(err instanceof Error ? err.message : 'Failed to load collections');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  async function handleCreateCollectionInline() {
+    const name = newCollectionName.trim();
+    if (!name) return;
+    setSavingCollection(true);
+    setCollectionsError(null);
+    try {
+      const created = await createCollection(user.uid, name);
+      setCollections((prev) => [...prev, created]);
+      setSelectedCollectionId(created.id);
+      setNewCollectionName('');
+      setCreatingCollection(false);
+    } catch (err) {
+      setCollectionsError(err instanceof Error ? err.message : 'Failed to create collection');
+    } finally {
+      setSavingCollection(false);
+    }
+  }
 
   function handlePhotoChange(slot: PhotoSlot, file: File | undefined) {
     setPhotos((prev) => ({ ...prev, [slot]: file }));
@@ -160,7 +205,7 @@ export default function UploadPage({ user }: { user: User }) {
         console.warn('AI sticker generation failed, falling back to photo thumbnail:', stickerErr);
       }
 
-      await saveItem(user.uid, photoFiles, modelBlob, trimmedMetadata, setSaveStage, stickerBlob);
+      await saveItem(user.uid, photoFiles, modelBlob, trimmedMetadata, setSaveStage, stickerBlob, selectedCollectionId || null);
       setStatus('saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save item');
@@ -281,6 +326,61 @@ export default function UploadPage({ user }: { user: User }) {
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>2. Item details</h2>
       <ItemMetadataForm value={metadata} onChange={setMetadata} nameRequired />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: '#aaa' }}>
+        <label htmlFor="new-item-collection-select">Collection:</label>
+        <select
+          id="new-item-collection-select"
+          value={selectedCollectionId}
+          onChange={(e) => setSelectedCollectionId(e.target.value)}
+          disabled={isGenerating}
+          style={{ fontSize: 12 }}
+        >
+          <option value="">Uncategorized</option>
+          {collections.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        {creatingCollection ? (
+          <>
+            <input
+              autoFocus
+              value={newCollectionName}
+              onChange={(e) => setNewCollectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateCollectionInline();
+                if (e.key === 'Escape') {
+                  setCreatingCollection(false);
+                  setNewCollectionName('');
+                }
+              }}
+              placeholder="Collection name"
+              style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
+              disabled={savingCollection}
+            />
+            <button onClick={handleCreateCollectionInline} disabled={savingCollection || !newCollectionName.trim()} style={{ fontSize: 12 }}>
+              {savingCollection ? '…' : 'Add'}
+            </button>
+            <button
+              onClick={() => {
+                setCreatingCollection(false);
+                setNewCollectionName('');
+              }}
+              disabled={savingCollection}
+              style={{ fontSize: 12 }}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button onClick={() => setCreatingCollection(true)} disabled={isGenerating} style={{ fontSize: 12 }}>
+            + New Collection
+          </button>
+        )}
+      </div>
+      {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{collectionsError}</p>}
 
       {!hasName && (
         <p style={{ color: '#e0a030', fontSize: 12, marginTop: 8 }}>Item name is required to generate a model.</p>

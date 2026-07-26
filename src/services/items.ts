@@ -9,7 +9,8 @@ export async function saveItem(
   modelBlob: Blob,
   metadata: ItemMetadata,
   onProgress?: (stage: string) => void,
-  stickerBlob?: Blob | null
+  stickerBlob?: Blob | null,
+  collectionId?: string | null
 ): Promise<string> {
   const itemId = crypto.randomUUID();
   const basePath = `items/${userId}/${itemId}`;
@@ -45,6 +46,7 @@ export async function saveItem(
     photos: photoUrls,
     modelUrl,
     ...(stickerUrl ? { stickerUrl } : {}),
+    ...(collectionId ? { collectionId } : {}),
     ...metadata,
     createdAt: serverTimestamp(),
   });
@@ -129,6 +131,20 @@ export async function deleteItem(item: Item): Promise<void> {
   );
 
   await deleteDoc(doc(db, 'items', item.id));
+}
+
+/**
+ * Moves an item into a different Collection, or back to "Uncategorized"
+ * when `collectionId` is null (used by the Item Detail "Collection" picker,
+ * PRD 4.2 "My Collections"). Mirrors clearItemBackgroundImage's use of
+ * deleteField() above for the "remove/unset" case, rather than writing an
+ * empty string or null, so an uncategorized item's doc has no dangling
+ * `collectionId` field at all.
+ */
+export async function moveItemToCollection(itemId: string, collectionId: string | null): Promise<void> {
+  await updateDoc(doc(db, 'items', itemId), {
+    collectionId: collectionId ?? deleteField(),
+  });
 }
 
 export async function getItems(userId: string): Promise<Item[]> {

@@ -6,8 +6,10 @@ import {
   updateItemSticker,
   setItemBackgroundImage,
   clearItemBackgroundImage,
+  moveItemToCollection,
   deleteItem,
 } from '../services/items';
+import { getCollections, createCollection, deleteCollection } from '../services/collections';
 import { getOrCreateUserProfile } from '../services/users';
 import { modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromUrl } from '../services/stickerClient';
@@ -15,7 +17,12 @@ import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
 import PhotoGallery from '../components/PhotoGallery';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
-import type { Item, ItemMetadata } from '../types';
+import type { Item, ItemMetadata, Collection } from '../types';
+
+// Sentinels for the collection tab selector — never persisted, only used as
+// the `selectedCollectionId` UI state's "no real collection selected" values.
+const ALL_COLLECTIONS = '__all__';
+const UNCATEGORIZED = '__uncategorized__';
 
 function metadataOf(item: Item): ItemMetadata {
   return {
@@ -57,6 +64,19 @@ export default function HomePage({ user }: { user: User }) {
   // welcome banner so the avatar set on the Profile page shows up here too.
   const [photoURL, setPhotoURL] = useState<string | null>(null);
 
+  // PRD 4.2 "My Collections" — named groupings the user creates to organize
+  // items. `selectedCollectionId` is one of ALL_COLLECTIONS/UNCATEGORIZED or
+  // a real Collection's id; kept separate from the §4.6 filter/sort state
+  // below since a collection is a coarser, user-authored grouping rather
+  // than a derived filter, but both narrow the same `items` array together.
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(ALL_COLLECTIONS);
+  const [creatingCollection, setCreatingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [savingCollection, setSavingCollection] = useState(false);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
+  const [movingItem, setMovingItem] = useState(false);
+
   // PRD 4.6 Collection Screen — search / filter / sort. All client-side: the
   // whole collection is already fetched in one shot (getItems has no
   // pagination), so there's no reason to round-trip to Firestore again just
@@ -88,6 +108,13 @@ export default function HomePage({ user }: { user: User }) {
       .catch(() => {
         if (!cancelled) setDisplayName(null);
       });
+    getCollections(user.uid)
+      .then((data) => {
+        if (!cancelled) setCollections(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCollectionsError(err instanceof Error ? err.message : 'Failed to load collections');
+      });
     return () => {
       cancelled = true;
     };
@@ -116,6 +143,14 @@ export default function HomePage({ user }: { user: User }) {
   const displayedItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let result = items.filter((item) => {
+      if (selectedCollectionId === UNCATEGORIZED && item.collectionId) return false;
+      if (
+        selectedCollectionId !== ALL_COLLECTIONS &&
+        selectedCollectionId !== UNCATEGORIZED &&
+        item.collectionId !== selectedCollectionId
+      ) {
+        return false;
+      }
       if (filterType !== 'All' && item.type !== filterType) return false;
       if (!q) return true;
       return (
@@ -137,7 +172,7 @@ export default function HomePage({ user }: { user: User }) {
     }
     // 'newest' needs no resort — that's the order `items` is already in.
     return result;
-  }, [items, searchQuery, filterType, sortBy]);
+  }, [items, searchQuery, filterType, sortBy, selectedCollectionId]);
 
   function selectItem(item: Item | null) {
     setSelected(item);
@@ -196,6 +231,61 @@ export default function HomePage({ user }: { user: User }) {
       setBackgroundImageError(err instanceof Error ? err.message : 'Failed to remove background image');
     } finally {
       setSavingBackgroundImage(false);
+    }
+  }
+
+  async function handleCreateCollection() {
+    const name = newCollectionName.trim();
+    if (!name) return;
+    setSavingCollection(true);
+    setCollectionsError(null);
+    try {
+      const created = await createCollection(user.uid, name);
+      setCollections((prev) => [...prev, created]);
+      setSelectedCollectionId(created.id);
+      setNewCollectionName('');
+      setCreatingCollection(false);
+    } catch (err) {
+      setCollectionsError(err instanceof Error ? err.message : 'Failed to create collection');
+    } finally {
+      setSavingCollection(false);
+    }
+  }
+
+  async function handleDeleteCollection(collectionToDelete: Collection) {
+    // Deleting a collection only removes the label — member items are
+    // reassigned to Uncategorized by deleteCollection(), not deleted.
+    const ok = window.confirm(
+      `Delete "${collectionToDelete.name}"? Items in it will move to Uncategorized, not be deleted.`
+    );
+    if (!ok) return;
+
+    setCollectionsError(null);
+    try {
+      await deleteCollection(user.uid, collectionToDelete.id);
+      setCollections((prev) => prev.filter((c) => c.id !== collectionToDelete.id));
+      setItems((prev) =>
+        prev.map((it) => (it.collectionId === collectionToDelete.id ? { ...it, collectionId: undefined } : it))
+      );
+      if (selectedCollectionId === collectionToDelete.id) setSelectedCollectionId(ALL_COLLECTIONS);
+    } catch (err) {
+      setCollectionsError(err instanceof Error ? err.message : 'Failed to delete collection');
+    }
+  }
+
+  async function handleMoveSelectedItemToCollection(collectionId: string | null) {
+    if (!selected) return;
+    setMovingItem(true);
+    setCollectionsError(null);
+    try {
+      await moveItemToCollection(selected.id, collectionId);
+      const updated = { ...selected, collectionId: collectionId ?? undefined };
+      setSelected(updated);
+      setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
+    } catch (err) {
+      setCollectionsError(err instanceof Error ? err.message : 'Failed to move item');
+    } finally {
+      setMovingItem(false);
     }
   }
 
@@ -336,6 +426,120 @@ export default function HomePage({ user }: { user: User }) {
       )}
 
       {!selected && items.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
+            <button
+              onClick={() => setSelectedCollectionId(ALL_COLLECTIONS)}
+              style={{
+                flexShrink: 0,
+                fontSize: 12,
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid ' + (selectedCollectionId === ALL_COLLECTIONS ? '#6ea8ff' : '#444'),
+                background: selectedCollectionId === ALL_COLLECTIONS ? 'rgba(110, 168, 255, 0.15)' : 'none',
+                color: selectedCollectionId === ALL_COLLECTIONS ? '#6ea8ff' : '#ccc',
+                cursor: 'pointer',
+              }}
+            >
+              All Items
+            </button>
+            <button
+              onClick={() => setSelectedCollectionId(UNCATEGORIZED)}
+              style={{
+                flexShrink: 0,
+                fontSize: 12,
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid ' + (selectedCollectionId === UNCATEGORIZED ? '#6ea8ff' : '#444'),
+                background: selectedCollectionId === UNCATEGORIZED ? 'rgba(110, 168, 255, 0.15)' : 'none',
+                color: selectedCollectionId === UNCATEGORIZED ? '#6ea8ff' : '#ccc',
+                cursor: 'pointer',
+              }}
+            >
+              Uncategorized
+            </button>
+            {collections.map((c) => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <button
+                  onClick={() => setSelectedCollectionId(c.id)}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 12,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid ' + (selectedCollectionId === c.id ? '#6ea8ff' : '#444'),
+                    background: selectedCollectionId === c.id ? 'rgba(110, 168, 255, 0.15)' : 'none',
+                    color: selectedCollectionId === c.id ? '#6ea8ff' : '#ccc',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {c.name}
+                </button>
+                {selectedCollectionId === c.id && (
+                  <button
+                    onClick={() => handleDeleteCollection(c)}
+                    title="Delete collection"
+                    style={{ marginLeft: 2, fontSize: 11, color: '#e05555', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            {creatingCollection ? (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                <input
+                  autoFocus
+                  value={newCollectionName}
+                  onChange={(e) => setNewCollectionName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateCollection();
+                    if (e.key === 'Escape') {
+                      setCreatingCollection(false);
+                      setNewCollectionName('');
+                    }
+                  }}
+                  placeholder="Collection name"
+                  style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
+                  disabled={savingCollection}
+                />
+                <button onClick={handleCreateCollection} disabled={savingCollection || !newCollectionName.trim()} style={{ fontSize: 12 }}>
+                  {savingCollection ? '…' : 'Add'}
+                </button>
+                <button
+                  onClick={() => {
+                    setCreatingCollection(false);
+                    setNewCollectionName('');
+                  }}
+                  disabled={savingCollection}
+                  style={{ fontSize: 12 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setCreatingCollection(true)}
+                style={{
+                  flexShrink: 0,
+                  fontSize: 12,
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: '1px dashed #666',
+                  background: 'none',
+                  color: '#888',
+                  cursor: 'pointer',
+                }}
+              >
+                + New Collection
+              </button>
+            )}
+          </div>
+          {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 6 }}>{collectionsError}</p>}
+        </div>
+      )}
+
+      {!selected && items.length > 0 && (
         <div style={{ marginTop: 12, marginBottom: 12 }}>
           <input
             type="search"
@@ -431,6 +635,25 @@ export default function HomePage({ user }: { user: User }) {
               {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{deleteError}</p>}
               {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{stickerError}</p>}
               {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{moodboardError}</p>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#888' }}>
+                <label htmlFor="collection-select">Collection:</label>
+                <select
+                  id="collection-select"
+                  value={selected.collectionId ?? ''}
+                  onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
+                  disabled={movingItem}
+                  style={{ fontSize: 12 }}
+                >
+                  <option value="">Uncategorized</option>
+                  {collections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                {movingItem && <span>Moving…</span>}
+              </div>
+              {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{collectionsError}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 12, color: '#888' }}>
                 {selected.type && (
                   <span style={{ border: '1px solid #555', borderRadius: 999, padding: '2px 8px' }}>{selected.type}</span>
