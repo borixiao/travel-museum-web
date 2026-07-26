@@ -32,12 +32,28 @@ export interface ItemMetadata {
   emotionTags: EmotionTag[];
 }
 
+// PRD 4.2 "My Collections" — a lightweight named grouping of items, purely a
+// label (not a container that owns its items): deleting a collection clears
+// `Item.collectionId` on its members rather than deleting the items
+// themselves. One flat `collections` list per user, same one-flat-list-per-
+// user shape the existing `items` collection already uses.
+export interface Collection {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: unknown;
+}
+
 // Firestore docs saved before metadata fields existed won't have them — make
 // them optional on read so older items don't crash the UI, even though the
 // save path (ItemMetadata) always provides them going forward.
 export interface Item extends Partial<ItemMetadata> {
   id: string;
   userId: string;
+  /** Which Collection this item belongs to, if any — undefined/absent means
+   *  "Uncategorized" rather than an error, both for items saved before this
+   *  feature existed and for items whose collection was since deleted. */
+  collectionId?: string;
   photos: string[];
   modelUrl: string;
   /** Present only on items migrated from a legacy third-party (Tripo) URL — kept for audit/debugging. */
