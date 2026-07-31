@@ -265,6 +265,7 @@ export default function MoodboardPage({ user }: { user: User }) {
     <div style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
       <input
         value={title}
+        aria-label="Moodboard title"
         onChange={(e) => setTitle(e.target.value)}
         onBlur={handleTitleBlur}
         style={{
@@ -344,7 +345,9 @@ export default function MoodboardPage({ user }: { user: User }) {
           {items.map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => addItemCard(item)}
+              aria-label={`Add ${item.name || 'Untitled item'} to moodboard`}
               style={{
                 flexShrink: 0,
                 width: 84,

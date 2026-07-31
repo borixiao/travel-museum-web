@@ -82,6 +82,7 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <input
           type="email"
+          aria-label="Email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -90,6 +91,7 @@ export default function LoginPage() {
         {mode === 'register' && (
           <input
             type="text"
+            aria-label="Display name"
             placeholder="Display name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -97,6 +99,7 @@ export default function LoginPage() {
         )}
         <input
           type="password"
+          aria-label="Password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -106,6 +109,7 @@ export default function LoginPage() {
         {mode === 'register' && (
           <input
             type="password"
+            aria-label="Confirm password"
             placeholder="Confirm password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -113,8 +117,8 @@ export default function LoginPage() {
             minLength={6}
           />
         )}
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        {resetMessage && <p style={{ color: '#6ea8ff' }}>{resetMessage}</p>}
+        {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
+        {resetMessage && <p role="status" style={{ color: '#6ea8ff' }}>{resetMessage}</p>}
         <button type="submit" disabled={busy}>
           {mode === 'login' ? 'Log In' : 'Register'}
         </button>
