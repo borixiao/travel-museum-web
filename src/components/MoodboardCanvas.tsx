@@ -276,8 +276,10 @@ export default function MoodboardCanvas({
         >
           {editable && onRemove && (
             <button
+              type="button"
               onClick={() => onRemove(card.id)}
               onPointerDown={(e) => e.stopPropagation()}
+              aria-label={`Remove ${card.name || card.type} card`}
               style={{
                 position: 'absolute',
                 top: -10,
@@ -300,10 +302,12 @@ export default function MoodboardCanvas({
           )}
           {editable && onRotate && (
             <button
+              type="button"
               onPointerDown={(e) => handleRotateStart(e, card)}
               onPointerMove={handleRotateMove}
               onPointerUp={handleRotateEnd}
               title="Drag to rotate"
+              aria-label={`Rotate ${card.name || card.type} card`}
               style={{
                 position: 'absolute',
                 top: -10,
@@ -327,10 +331,12 @@ export default function MoodboardCanvas({
           )}
           {editable && onResize && (
             <button
+              type="button"
               onPointerDown={(e) => handleResizeStart(e, card)}
               onPointerMove={handleResizeMove}
               onPointerUp={handleResizeEnd}
               title="Drag to resize"
+              aria-label={`Resize ${card.name || card.type} card`}
               style={{
                 position: 'absolute',
                 bottom: -10,
@@ -354,9 +360,11 @@ export default function MoodboardCanvas({
           )}
           {editable && onToggleDisplayMode && card.type === 'item' && card.modelUrl && (
             <button
+              type="button"
               onClick={() => onToggleDisplayMode(card.id)}
               onPointerDown={(e) => e.stopPropagation()}
               title={card.displayMode === 'model' ? 'Show sticker' : 'Show 3D model'}
+              aria-label={card.displayMode === 'model' ? `Show ${card.name || 'item'} as a sticker` : `Show ${card.name || 'item'} as a 3D model`}
               style={{
                 position: 'absolute',
                 bottom: -10,
@@ -414,6 +422,7 @@ export default function MoodboardCanvas({
                   <div style={{ height: 14, background: 'rgba(0,0,0,0.08)', borderRadius: '6px 6px 0 0' }} />
                   <textarea
                     value={card.text ?? ''}
+                    aria-label="Edit moodboard text card"
                     onChange={(e) => onTextChange?.(card.id, e.target.value)}
                     onBlur={() => onTextBlur?.()}
                     onPointerDown={(e) => e.stopPropagation()}

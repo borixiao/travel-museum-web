@@ -235,6 +235,7 @@ export default function ProfilePage({ user }: { user: User }) {
             <div style={{ display: 'flex', gap: 6 }}>
               <input
                 type="text"
+                aria-label="Display name"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 autoFocus
@@ -293,6 +294,7 @@ export default function ProfilePage({ user }: { user: User }) {
             <h2 style={{ fontSize: 14, margin: 0 }}>Change password</h2>
             <input
               type="password"
+              aria-label="Current password"
               placeholder="Current password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -300,6 +302,7 @@ export default function ProfilePage({ user }: { user: User }) {
             />
             <input
               type="password"
+              aria-label="New password"
               placeholder="New password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -308,13 +311,14 @@ export default function ProfilePage({ user }: { user: User }) {
             />
             <input
               type="password"
+              aria-label="Confirm new password"
               placeholder="Confirm new password"
               value={confirmNewPassword}
               onChange={(e) => setConfirmNewPassword(e.target.value)}
               required
               minLength={6}
             />
-            {passwordError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{passwordError}</p>}
+            {passwordError && <p role="alert" style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{passwordError}</p>}
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={passwordBusy}>
                 {passwordBusy ? 'Saving…' : 'Save password'}

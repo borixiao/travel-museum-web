@@ -385,7 +385,9 @@ export default function HomePage({ user }: { user: User }) {
             {recentItems.map((item) => (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => selectItem(item)}
+                aria-label={`Open ${item.name || 'Untitled item'}`}
                 style={{
                   flexShrink: 0,
                   width: 96,
@@ -401,7 +403,7 @@ export default function HomePage({ user }: { user: User }) {
                 {item.stickerUrl ?? item.photos?.[0] ? (
                   <img
                     src={item.stickerUrl ?? item.photos![0]}
-                    alt="item thumbnail"
+                    alt=""
                     style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block' }}
                   />
                 ) : (
@@ -429,7 +431,9 @@ export default function HomePage({ user }: { user: User }) {
         <div style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
             <button
+              type="button"
               onClick={() => setSelectedCollectionId(ALL_COLLECTIONS)}
+              aria-pressed={selectedCollectionId === ALL_COLLECTIONS}
               style={{
                 flexShrink: 0,
                 fontSize: 12,
@@ -444,7 +448,9 @@ export default function HomePage({ user }: { user: User }) {
               All Items
             </button>
             <button
+              type="button"
               onClick={() => setSelectedCollectionId(UNCATEGORIZED)}
+              aria-pressed={selectedCollectionId === UNCATEGORIZED}
               style={{
                 flexShrink: 0,
                 fontSize: 12,
@@ -461,7 +467,9 @@ export default function HomePage({ user }: { user: User }) {
             {collections.map((c) => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 <button
+                  type="button"
                   onClick={() => setSelectedCollectionId(c.id)}
+                  aria-pressed={selectedCollectionId === c.id}
                   style={{
                     flexShrink: 0,
                     fontSize: 12,
@@ -477,8 +485,10 @@ export default function HomePage({ user }: { user: User }) {
                 </button>
                 {selectedCollectionId === c.id && (
                   <button
+                    type="button"
                     onClick={() => handleDeleteCollection(c)}
                     title="Delete collection"
+                    aria-label={`Delete collection ${c.name}`}
                     style={{ marginLeft: 2, fontSize: 11, color: '#e05555', background: 'none', border: 'none', cursor: 'pointer' }}
                   >
                     ✕
@@ -490,6 +500,7 @@ export default function HomePage({ user }: { user: User }) {
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                 <input
                   autoFocus
+                  aria-label="Collection name"
                   value={newCollectionName}
                   onChange={(e) => setNewCollectionName(e.target.value)}
                   onKeyDown={(e) => {
@@ -543,6 +554,7 @@ export default function HomePage({ user }: { user: User }) {
         <div style={{ marginTop: 12, marginBottom: 12 }}>
           <input
             type="search"
+            aria-label="Search collection items"
             placeholder="Search by name, location, or type…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -554,7 +566,9 @@ export default function HomePage({ user }: { user: User }) {
               {typeOptions.map((t) => (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => setFilterType(t)}
+                  aria-pressed={filterType === t}
                   style={{
                     flexShrink: 0,
                     fontSize: 12,
@@ -730,7 +744,9 @@ export default function HomePage({ user }: { user: User }) {
           {displayedItems.map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => selectItem(item)}
+              aria-label={`Open ${item.name || 'Untitled item'}`}
               style={{
                 border: '1px solid #444',
                 borderRadius: 8,
@@ -744,7 +760,7 @@ export default function HomePage({ user }: { user: User }) {
               {item.stickerUrl ?? item.photos?.[0] ? (
                 <img
                   src={item.stickerUrl ?? item.photos![0]}
-                  alt="item thumbnail"
+                  alt=""
                   style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
                 />
               ) : (

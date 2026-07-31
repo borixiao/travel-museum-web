@@ -20,6 +20,7 @@ export default function BottomTabBar<T extends string>({
 }) {
   return (
     <nav
+      aria-label="Primary navigation"
       style={{
         position: 'fixed',
         bottom: 0,
@@ -38,7 +39,10 @@ export default function BottomTabBar<T extends string>({
         return (
           <button
             key={tab.key}
+            type="button"
             onClick={() => onChange(tab.key as T)}
+            aria-label={tab.label}
+            aria-current={isActive ? 'page' : undefined}
             style={{
               flex: 1,
               display: 'flex',
@@ -52,7 +56,7 @@ export default function BottomTabBar<T extends string>({
               color: isActive ? '#6ea8ff' : '#888',
             }}
           >
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{tab.icon}</span>
+            <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>{tab.icon}</span>
             <span style={{ fontSize: 11 }}>{tab.label}</span>
           </button>
         );

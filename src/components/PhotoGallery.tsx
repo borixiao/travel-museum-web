@@ -25,6 +25,9 @@ export default function PhotoGallery({ photos }: { photos: string[] }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        role="region"
+        aria-label="Original item photos"
+        tabIndex={0}
         style={{
           display: 'flex',
           overflowX: 'auto',
@@ -54,6 +57,8 @@ export default function PhotoGallery({ photos }: { photos: string[] }) {
       {photos.length > 1 && (
         <>
           <div
+            aria-live="polite"
+            aria-atomic="true"
             style={{
               position: 'absolute',
               top: 8,
@@ -68,6 +73,7 @@ export default function PhotoGallery({ photos }: { photos: string[] }) {
             {activeIndex + 1} / {photos.length}
           </div>
           <div
+            aria-hidden="true"
             style={{
               position: 'absolute',
               bottom: 8,
