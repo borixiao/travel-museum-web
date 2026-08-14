@@ -30,7 +30,7 @@ function AuthenticatedApp({ user }: { user: User }) {
       {/* Bottom-fixed tab bar means content needs bottom padding so the last
           bit of scrollable content isn't hidden behind it. */}
       <div style={{ paddingBottom: 64 }}>
-        {tab === 'home' && <HomePage user={user} />}
+        {tab === 'home' && <HomePage user={user} onAddItem={() => setTab('upload')} />}
         {tab === 'upload' && <UploadPage user={user} />}
         {tab === 'moodboard' && <MoodboardPage user={user} />}
         {tab === 'profile' && <ProfilePage user={user} />}

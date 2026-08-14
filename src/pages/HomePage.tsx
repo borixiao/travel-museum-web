@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { User } from 'firebase/auth';
 import {
   getItems,
@@ -24,6 +25,19 @@ import type { Item, ItemMetadata, Collection } from '../types';
 const ALL_COLLECTIONS = '__all__';
 const UNCATEGORIZED = '__uncategorized__';
 
+// Light/warm palette for the browse view (hero, chips, item grid), matching
+// the "Memory Museum" visual design mockup. Kept as plain constants (not a
+// theme file) to match this codebase's existing inline-style convention —
+// the Item Detail screen below is a separate PRD screen not covered by this
+// pass and intentionally left in its prior styling.
+const PAGE_BG = '#faf7f4';
+const CARD_BG = '#ffffff';
+const TEXT_PRIMARY = '#1c1917';
+const TEXT_MUTED = '#8a8078';
+const BORDER_LIGHT = '#e8e1d8';
+const ACCENT = '#a1552e';
+const PLACEHOLDER_BG = '#efe8df';
+
 function metadataOf(item: Item): ItemMetadata {
   return {
     name: item.name ?? emptyItemMetadata.name,
@@ -35,7 +49,7 @@ function metadataOf(item: Item): ItemMetadata {
   };
 }
 
-export default function HomePage({ user }: { user: User }) {
+export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -357,30 +371,131 @@ export default function HomePage({ user }: { user: User }) {
     }
   }
 
+  // Shared pill style for the collection/type filter chip rows below —
+  // selected = solid dark fill, unselected = light outline — matching the
+  // "Memory Museum" design mockup's chip treatment.
+  function chipStyle(active: boolean): CSSProperties {
+    return {
+      flexShrink: 0,
+      fontSize: 12,
+      padding: '6px 12px',
+      borderRadius: 999,
+      border: '1px solid ' + (active ? TEXT_PRIMARY : BORDER_LIGHT),
+      background: active ? TEXT_PRIMARY : CARD_BG,
+      color: active ? '#fff' : TEXT_PRIMARY,
+      cursor: 'pointer',
+    };
+  }
+
   if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Loading your collection…</p>;
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
 
   return (
-    <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 16px' }}>
-      {displayName && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          {photoURL && (
-            <img
-              src={photoURL}
-              alt=""
-              style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-            />
-          )}
-          <p style={{ color: '#888', fontSize: 13, margin: 0 }}>Welcome back, {displayName}</p>
-        </div>
-      )}
-      <h1 style={{ fontSize: 20 }}>My Collection</h1>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+      {!selected && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            {photoURL && (
+              <img
+                src={photoURL}
+                alt=""
+                style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+              />
+            )}
+            <p style={{ color: TEXT_MUTED, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}>
+              {displayName ? `${displayName}'s Memory Museum` : 'Your Memory Museum'}
+            </p>
+          </div>
+          <h1 style={{ fontSize: 30, lineHeight: 1.3, margin: '0 0 8px', color: TEXT_PRIMARY, fontWeight: 700, letterSpacing: -0.5 }}>
+            Turn your life into a museum you can collect.
+          </h1>
+          <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 20px' }}>
+            Keep travel, relationships, and daily life in objects.
+          </p>
 
-      {items.length === 0 && <p style={{ color: '#888' }}>No saved 3D models yet.</p>}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+            <button
+              onClick={onAddItem}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                textAlign: 'left',
+                padding: '14px 14px',
+                borderRadius: 16,
+                border: 'none',
+                background: ACCENT,
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                style={{
+                  width: 32,
+                  height: 32,
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 15,
+                }}
+              >
+                📷
+              </span>
+              <span>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>Scan a Photo</span>
+                <span style={{ display: 'block', fontSize: 11, opacity: 0.85, marginTop: 1 }}>Capture a new item</span>
+              </span>
+            </button>
+            <button
+              onClick={() => setCreatingCollection(true)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                textAlign: 'left',
+                padding: '14px 14px',
+                borderRadius: 16,
+                border: '1px solid ' + BORDER_LIGHT,
+                background: CARD_BG,
+                color: TEXT_PRIMARY,
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                style={{
+                  width: 32,
+                  height: 32,
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  background: PLACEHOLDER_BG,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  color: ACCENT,
+                }}
+              >
+                +
+              </span>
+              <span>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>New Memory</span>
+                <span style={{ display: 'block', fontSize: 11, color: TEXT_MUTED, marginTop: 1 }}>Start a new collection</span>
+              </span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {items.length === 0 && <p style={{ color: TEXT_MUTED }}>No saved 3D models yet.</p>}
 
       {!selected && recentItems.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 13, color: '#888', margin: '0 0 6px' }}>Recent items</h2>
+          <h2 style={{ fontSize: 13, color: TEXT_MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
             {recentItems.map((item) => (
               <button
@@ -389,12 +504,12 @@ export default function HomePage({ user }: { user: User }) {
                 style={{
                   flexShrink: 0,
                   width: 96,
-                  border: '1px solid #444',
-                  borderRadius: 8,
+                  border: '1px solid ' + BORDER_LIGHT,
+                  borderRadius: 12,
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
-                  background: 'none',
+                  background: CARD_BG,
                   textAlign: 'left',
                 }}
               >
@@ -405,12 +520,12 @@ export default function HomePage({ user }: { user: User }) {
                     style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block' }}
                   />
                 ) : (
-                  <div style={{ width: '100%', height: 72, background: '#333' }} />
+                  <div style={{ width: '100%', height: 72, background: PLACEHOLDER_BG }} />
                 )}
                 <div
                   style={{
                     fontSize: 11,
-                    color: '#ddd',
+                    color: TEXT_PRIMARY,
                     padding: 4,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -426,53 +541,18 @@ export default function HomePage({ user }: { user: User }) {
       )}
 
       {!selected && items.length > 0 && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 20 }}>
+          <h2 style={{ fontSize: 14, color: TEXT_PRIMARY, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
-            <button
-              onClick={() => setSelectedCollectionId(ALL_COLLECTIONS)}
-              style={{
-                flexShrink: 0,
-                fontSize: 12,
-                padding: '4px 10px',
-                borderRadius: 999,
-                border: '1px solid ' + (selectedCollectionId === ALL_COLLECTIONS ? '#6ea8ff' : '#444'),
-                background: selectedCollectionId === ALL_COLLECTIONS ? 'rgba(110, 168, 255, 0.15)' : 'none',
-                color: selectedCollectionId === ALL_COLLECTIONS ? '#6ea8ff' : '#ccc',
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setSelectedCollectionId(ALL_COLLECTIONS)} style={chipStyle(selectedCollectionId === ALL_COLLECTIONS)}>
               All Items
             </button>
-            <button
-              onClick={() => setSelectedCollectionId(UNCATEGORIZED)}
-              style={{
-                flexShrink: 0,
-                fontSize: 12,
-                padding: '4px 10px',
-                borderRadius: 999,
-                border: '1px solid ' + (selectedCollectionId === UNCATEGORIZED ? '#6ea8ff' : '#444'),
-                background: selectedCollectionId === UNCATEGORIZED ? 'rgba(110, 168, 255, 0.15)' : 'none',
-                color: selectedCollectionId === UNCATEGORIZED ? '#6ea8ff' : '#ccc',
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setSelectedCollectionId(UNCATEGORIZED)} style={chipStyle(selectedCollectionId === UNCATEGORIZED)}>
               Uncategorized
             </button>
             {collections.map((c) => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <button
-                  onClick={() => setSelectedCollectionId(c.id)}
-                  style={{
-                    flexShrink: 0,
-                    fontSize: 12,
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    border: '1px solid ' + (selectedCollectionId === c.id ? '#6ea8ff' : '#444'),
-                    background: selectedCollectionId === c.id ? 'rgba(110, 168, 255, 0.15)' : 'none',
-                    color: selectedCollectionId === c.id ? '#6ea8ff' : '#ccc',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button onClick={() => setSelectedCollectionId(c.id)} style={chipStyle(selectedCollectionId === c.id)}>
                   {c.name}
                 </button>
                 {selectedCollectionId === c.id && (
@@ -500,7 +580,7 @@ export default function HomePage({ user }: { user: User }) {
                     }
                   }}
                   placeholder="Collection name"
-                  style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
+                  style={{ fontSize: 12, padding: '4px 8px', width: 120, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT }}
                   disabled={savingCollection}
                 />
                 <button onClick={handleCreateCollection} disabled={savingCollection || !newCollectionName.trim()} style={{ fontSize: 12 }}>
@@ -523,11 +603,11 @@ export default function HomePage({ user }: { user: User }) {
                 style={{
                   flexShrink: 0,
                   fontSize: 12,
-                  padding: '4px 10px',
+                  padding: '6px 12px',
                   borderRadius: 999,
-                  border: '1px dashed #666',
+                  border: '1px dashed ' + BORDER_LIGHT,
                   background: 'none',
-                  color: '#888',
+                  color: TEXT_MUTED,
                   cursor: 'pointer',
                 }}
               >
@@ -546,26 +626,21 @@ export default function HomePage({ user }: { user: User }) {
             placeholder="Search by name, location, or type…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px' }}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px solid ' + BORDER_LIGHT,
+              background: CARD_BG,
+              color: TEXT_PRIMARY,
+            }}
           />
 
           {typeOptions.length > 1 && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 8, paddingBottom: 4 }}>
               {typeOptions.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setFilterType(t)}
-                  style={{
-                    flexShrink: 0,
-                    fontSize: 12,
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    border: '1px solid ' + (filterType === t ? '#6ea8ff' : '#444'),
-                    background: filterType === t ? 'rgba(110, 168, 255, 0.15)' : 'none',
-                    color: filterType === t ? '#6ea8ff' : '#ccc',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button key={t} onClick={() => setFilterType(t)} style={chipStyle(filterType === t)}>
                   {t}
                 </button>
               ))}
@@ -573,14 +648,14 @@ export default function HomePage({ user }: { user: User }) {
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12 }}>
-            <label htmlFor="sort-select" style={{ color: '#888' }}>
+            <label htmlFor="sort-select" style={{ color: TEXT_MUTED }}>
               Sort:
             </label>
             <select
               id="sort-select"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              style={{ fontSize: 12 }}
+              style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT, padding: '3px 6px' }}
             >
               <option value="newest">Date (newest first)</option>
               <option value="oldest">Date (oldest first)</option>
@@ -732,12 +807,12 @@ export default function HomePage({ user }: { user: User }) {
               key={item.id}
               onClick={() => selectItem(item)}
               style={{
-                border: '1px solid #444',
-                borderRadius: 8,
+                border: '1px solid ' + BORDER_LIGHT,
+                borderRadius: 12,
                 padding: 0,
                 overflow: 'hidden',
                 cursor: 'pointer',
-                background: 'none',
+                background: CARD_BG,
                 textAlign: 'left',
               }}
             >
@@ -748,13 +823,13 @@ export default function HomePage({ user }: { user: User }) {
                   style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
                 />
               ) : (
-                <div style={{ width: '100%', height: 120, background: '#333' }} />
+                <div style={{ width: '100%', height: 120, background: PLACEHOLDER_BG }} />
               )}
               <div style={{ padding: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {item.name || 'Untitled item'}
                 </div>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
                   {item.type ?? 'Click to view 3D model'}
                   {item.location ? ` · ${item.location}` : ''}
                 </div>
