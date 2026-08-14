@@ -378,17 +378,31 @@ export default function MoodboardCanvas({
             </button>
           )}
           {card.type === 'item' ? (
-            <div style={{ background: '#fff', borderRadius: 6, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
+            // No wrapper background here (was solid white) — item cards now
+            // sit directly on the board's own background/image instead of a
+            // white card, closer to a cut-out sticker look. The sticker/photo
+            // itself still carries whatever backdrop it was generated or
+            // photographed with (gpt-image-2 has no true transparent-output
+            // mode — confirmed in the shelved bg-removal experiment branch),
+            // so this only removes the *extra* white layer, it isn't a real
+            // alpha cutout.
+            <div style={{ borderRadius: 6, overflow: 'hidden' }}>
               {card.displayMode === 'model' && card.modelUrl ? (
                 <div style={{ width: '100%', aspectRatio: '1' }}>
-                  <ModelViewer url={modelProxyUrl(card.modelUrl)} interactive={false} height="100%" fallbackMessage="3D preview unavailable" />
+                  <ModelViewer
+                    url={modelProxyUrl(card.modelUrl)}
+                    interactive={false}
+                    height="100%"
+                    fallbackMessage="3D preview unavailable"
+                    transparentBackground
+                  />
                 </div>
               ) : card.photoUrl ? (
                 <img
                   src={card.photoUrl}
                   alt={card.name ?? ''}
                   draggable={false}
-                  style={{ width: '100%', display: 'block', aspectRatio: '1', objectFit: 'cover' }}
+                  style={{ width: '100%', display: 'block', aspectRatio: '1', objectFit: 'cover', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))' }}
                 />
               ) : (
                 <div style={{ width: '100%', aspectRatio: '1', background: '#ddd' }} />
@@ -396,12 +410,13 @@ export default function MoodboardCanvas({
               <div
                 style={{
                   fontSize: 11,
-                  padding: '4px 6px',
-                  color: '#222',
+                  padding: '2px 6px',
+                  color: '#fff',
                   fontWeight: 600,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  textShadow: '0 1px 3px rgba(0,0,0,0.8)',
                 }}
               >
                 {card.name || 'Untitled item'}
