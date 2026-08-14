@@ -9,8 +9,35 @@ import ModelViewer from '../components/ModelViewer';
 import ProgressBar from '../components/ProgressBar';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { PhotoSlot, ItemMetadata, Collection } from '../types';
+import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
 
 const SLOTS: PhotoSlot[] = ['front', 'left', 'back', 'right'];
+
+// Per-step copy for the "Scan Item" capture wizard — front is the only
+// required angle (matches Tripo's 2-photo floor being satisfiable with just
+// one more), the rest are explicitly skippable.
+const WIZARD_COPY: Record<PhotoSlot, { title: string; heading: string; subtitle: string }> = {
+  front: {
+    title: 'Scan Item',
+    heading: 'Save an item with your camera',
+    subtitle: "Capture the whole item — we'll generate a 2D sticker and continue building a 3D model.",
+  },
+  left: {
+    title: 'Scan the Left Side',
+    heading: 'Add another angle',
+    subtitle: 'A second angle helps us build a more accurate 3D model. You can skip this step.',
+  },
+  back: {
+    title: 'Scan the Back',
+    heading: 'Add another angle',
+    subtitle: 'A second angle helps us build a more accurate 3D model. You can skip this step.',
+  },
+  right: {
+    title: 'Scan the Right Side',
+    heading: 'Add another angle',
+    subtitle: 'A second angle helps us build a more accurate 3D model. You can skip this step.',
+  },
+};
 
 type Status = 'idle' | 'uploading' | 'generating' | 'preview' | 'error' | 'saving' | 'saved';
 
@@ -63,6 +90,17 @@ export default function UploadPage({ user }: { user: User }) {
   // Cancel click can actually interrupt the fetch/poll cycle rather than
   // just hiding the UI while the request keeps running in the background.
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // "Scan Item" capture wizard — walks through SLOTS one at a time instead
+  // of showing all 4 as a static grid. `wizardIndex === SLOTS.length` means
+  // every step has been passed through (captured or skipped) and the rest
+  // of the page (item details, generate) is shown. Only `front` is
+  // required to advance; left/back/right can be skipped — Tripo's 2-photo
+  // floor is enforced downstream by the existing hasMinPhotos warning, not
+  // re-implemented here.
+  const [wizardIndex, setWizardIndex] = useState(0);
+  const wizardCameraInputRef = useRef<HTMLInputElement>(null);
+  const wizardLibraryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Revoke every still-live preview URL on unmount — object URLs otherwise
@@ -270,112 +308,164 @@ export default function UploadPage({ user }: { user: User }) {
   const isGenerating = status === 'uploading' || status === 'generating';
   const canGenerate = hasFront && hasMinPhotos && hasName && !isGenerating;
 
-  return (
-    <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 16px' }}>
-      <h1 style={{ fontSize: 20 }}>3D Texture Test</h1>
-      <p style={{ color: '#888' }}>Logged in as {user.email}</p>
+  if (wizardIndex < SLOTS.length) {
+    const slot = SLOTS[wizardIndex];
+    const preview = photoPreviews[slot];
+    const isRequired = slot === 'front';
+    const copy = WIZARD_COPY[slot];
 
-      <h2 style={{ fontSize: 16, marginTop: 24 }}>1. Upload photos (front + at least 1 more angle required)</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        {SLOTS.map((slot) => {
-          const inputId = `photo-slot-${slot}`;
-          const preview = photoPreviews[slot];
-          return (
-            // Outer div is a plain positioning container, NOT a <label> —
-            // the "×" clear button below is a sibling of the <label>, not a
-            // descendant of it. Nesting the button inside the label would
-            // risk the browser's native label→input click-forwarding still
-            // opening the file picker even with stopPropagation() on the
-            // button's own click handler.
-            <div key={slot} style={{ position: 'relative', border: '1px dashed #666', borderRadius: 6, overflow: 'hidden' }}>
-              <label
-                htmlFor={inputId}
-                style={{ display: 'block', padding: 8, textAlign: 'center', cursor: 'pointer' }}
-              >
-                <div style={{ fontSize: 12, marginBottom: 4 }}>{slot}{slot === 'front' ? ' (required)' : ''}</div>
-                <input
-                  id={inputId}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    handlePhotoChange(slot, e.target.files?.[0]);
-                    // Reset the native input's own value after every pick.
-                    // Browsers only fire `change` when the input's value
-                    // actually differs from before, and a <input type="file">
-                    // compares by filename/path — so re-selecting the exact
-                    // same file as last time (e.g. re-picking the photo you
-                    // just cleared with the "×" button) silently does nothing
-                    // without this, since as far as the DOM is concerned
-                    // nothing changed. Clearing the value here means the next
-                    // pick always starts from "empty", so `change` reliably
-                    // fires even for the same file twice in a row.
-                    e.target.value = '';
-                  }}
-                />
-                {preview ? (
-                  <>
-                    <img
-                      src={preview}
-                      alt={`${slot} preview`}
-                      style={{ width: '100%', height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }}
-                    />
-                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>Tap to retake</div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#888' }}>Choose file</div>
-                )}
-              </label>
-              {preview && (
-                <button
-                  type="button"
-                  onClick={() => handlePhotoChange(slot, undefined)}
-                  aria-label={`Clear ${slot} photo`}
-                  style={{
-                    position: 'absolute',
-                    top: 4,
-                    right: 4,
-                    width: 20,
-                    height: 20,
-                    lineHeight: '18px',
-                    padding: 0,
-                    borderRadius: '50%',
-                    border: '1px solid #666',
-                    background: '#222',
-                    color: '#ddd',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                  }}
-                >
-                  ×
-                </button>
-              )}
+    return (
+      <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
+          {wizardIndex > 0 ? (
+            <button
+              onClick={() => setWizardIndex((i) => i - 1)}
+              aria-label="Back"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: CARD_BG,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                cursor: 'pointer',
+                fontSize: 18,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              ‹
+            </button>
+          ) : (
+            <div style={{ width: 36, flexShrink: 0 }} />
+          )}
+          <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0 }}>{copy.title}</h1>
+          <div style={{ width: 36, flexShrink: 0 }} />
+        </div>
+
+        {/* Same tap-to-retake convention as the rest of the app — tapping
+            the box (empty or already filled) reopens the camera-preferring
+            input. The dotted background approximates the design mockup's
+            scan-target grid via a small repeating radial-gradient. */}
+        <button
+          type="button"
+          onClick={() => wizardCameraInputRef.current?.click()}
+          style={{
+            display: 'block',
+            width: '100%',
+            aspectRatio: '1',
+            borderRadius: 20,
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            overflow: 'hidden',
+            background: `${PLACEHOLDER_BG} radial-gradient(circle, ${BORDER_LIGHT} 1px, transparent 1px) 0 0 / 16px 16px`,
+          }}
+        >
+          {preview ? (
+            <img src={preview} alt={`${slot} preview`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: TEXT_MUTED }}>
+              <span style={{ fontSize: 32 }}>📷</span>
+              <span style={{ fontSize: 12 }}>Tap to scan</span>
             </div>
-          );
-        })}
+          )}
+        </button>
+
+        <input
+          ref={wizardCameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            handlePhotoChange(slot, e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={wizardLibraryInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            handlePhotoChange(slot, e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+
+        <h2 style={{ fontSize: 22, fontWeight: 700, margin: '24px 0 8px', lineHeight: 1.3 }}>{copy.heading}</h2>
+        <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 24px' }}>{copy.subtitle}</p>
+
+        <button
+          onClick={() => {
+            if (preview) setWizardIndex((i) => i + 1);
+            else wizardCameraInputRef.current?.click();
+          }}
+          style={{ width: '100%', padding: '14px', borderRadius: 16, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+        >
+          {preview ? 'Continue' : 'Take Photo'}
+        </button>
+        <button
+          onClick={() => wizardLibraryInputRef.current?.click()}
+          style={{ width: '100%', padding: '14px', borderRadius: 16, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG, color: TEXT_PRIMARY, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 10 }}
+        >
+          Choose from Photo Library
+        </button>
+
+        {isRequired ? (
+          <button
+            onClick={() => wizardLibraryInputRef.current?.click()}
+            style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
+          >
+            Camera not working?
+          </button>
+        ) : (
+          !preview && (
+            <button
+              onClick={() => setWizardIndex((i) => i + 1)}
+              style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Skip this angle
+            </button>
+          )
+        )}
       </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+      <button
+        onClick={() => setWizardIndex(0)}
+        style={{ background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 12 }}
+      >
+        ‹ Retake photos
+      </button>
 
       {!hasFront && (
-        <p style={{ color: '#e0a030', fontSize: 12, marginTop: 8 }}>Front photo is required to generate a model.</p>
+        <p style={{ color: '#c07a1e', fontSize: 12, marginBottom: 8 }}>Front photo is required to generate a model.</p>
       )}
       {hasFront && !hasMinPhotos && (
-        <p style={{ color: '#e0a030', fontSize: 12, marginTop: 8 }}>
+        <p style={{ color: '#c07a1e', fontSize: 12, marginBottom: 8 }}>
           At least 1 more angle (left/back/right) is required — Tripo needs 2+ photos to build a 3D model.
         </p>
       )}
       {hasFront && hasMinPhotos && photoCount < 4 && (
-        <p style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+        <p style={{ color: TEXT_MUTED, fontSize: 12, marginBottom: 8 }}>
           Tip: adding more angles improves model quality, though you have enough to generate now.
         </p>
       )}
 
-      <h2 style={{ fontSize: 16, marginTop: 24 }}>2. Item details</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px' }}>Item details</h2>
       {classifyingType && (
-        <p style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>AI 辨識中…</p>
+        <p style={{ color: TEXT_MUTED, fontSize: 12, marginBottom: 4 }}>AI is identifying this item…</p>
       )}
       <ItemMetadataForm value={metadata} onChange={setMetadata} nameRequired />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: '#aaa' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: TEXT_MUTED }}>
         <label htmlFor="new-item-collection-select">Collection:</label>
         <select
           id="new-item-collection-select"
@@ -431,10 +521,25 @@ export default function UploadPage({ user }: { user: User }) {
       {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{collectionsError}</p>}
 
       {!hasName && (
-        <p style={{ color: '#e0a030', fontSize: 12, marginTop: 8 }}>Item name is required to generate a model.</p>
+        <p style={{ color: '#c07a1e', fontSize: 12, marginTop: 8 }}>Item name is required to generate a model.</p>
       )}
 
-      <button onClick={handleGenerate} disabled={!canGenerate} style={{ marginTop: 16 }}>
+      <button
+        onClick={handleGenerate}
+        disabled={!canGenerate}
+        style={{
+          width: '100%',
+          marginTop: 16,
+          padding: '14px',
+          borderRadius: 16,
+          border: 'none',
+          background: canGenerate ? ACCENT : BORDER_LIGHT,
+          color: canGenerate ? '#fff' : TEXT_MUTED,
+          fontWeight: 700,
+          fontSize: 15,
+          cursor: canGenerate ? 'pointer' : 'default',
+        }}
+      >
         Generate 3D Model
       </button>
 
@@ -443,7 +548,7 @@ export default function UploadPage({ user }: { user: User }) {
           <p style={{ marginBottom: 4 }}>
             {status === 'uploading' ? 'Uploading photos…' : `Generating… ${progress}%`}
             {attempt > 1 && (
-              <span style={{ color: '#e0a030' }}> (retry {attempt - 1}/{MAX_GENERATE_ATTEMPTS - 1})</span>
+              <span style={{ color: '#c07a1e' }}> (retry {attempt - 1}/{MAX_GENERATE_ATTEMPTS - 1})</span>
             )}
           </p>
           <ProgressBar progress={status === 'generating' ? progress : undefined} />
