@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { generate3DModelWithRetry, isAbortError, MAX_GENERATE_ATTEMPTS, modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromFile } from '../services/stickerClient';
+import { classifyItemType } from '../services/itemClassifierClient';
 import { saveItem } from '../services/items';
 import { getCollections, createCollection } from '../services/collections';
 import ModelViewer from '../components/ModelViewer';
@@ -29,6 +30,15 @@ export default function UploadPage({ user }: { user: User }) {
 
   // Item metadata (PRD 4.3 Add Item Screen — item name/type/location/date/story/emotion tags)
   const [metadata, setMetadata] = useState<ItemMetadata>(emptyItemMetadata);
+
+  // AI auto-classification of the Type field from the front photo (best-effort
+  // pre-fill, never authoritative — see itemClassifierClient.ts). Fires
+  // automatically as soon as a front photo is picked, distinct from the
+  // Tripo generation flow's abortControllerRef since this request has its
+  // own independent lifecycle (can be superseded by re-picking the front
+  // photo at any time, long before "Generate" is ever clicked).
+  const [classifyingType, setClassifyingType] = useState(false);
+  const classifyAbortRef = useRef<AbortController | null>(null);
 
   // PRD 4.2 "My Collections" — lets a new item be filed straight into a
   // collection at creation time instead of only via the Home screen's
@@ -61,6 +71,7 @@ export default function UploadPage({ user }: { user: User }) {
       Object.values(photoPreviewsRef.current).forEach((url) => {
         if (url) URL.revokeObjectURL(url);
       });
+      classifyAbortRef.current?.abort();
     };
   }, []);
 
@@ -110,6 +121,40 @@ export default function UploadPage({ user }: { user: User }) {
       photoPreviewsRef.current = next;
       return next;
     });
+
+    if (slot === 'front') {
+      // Superseding the front photo (re-picking or clearing it) invalidates
+      // whatever classification request was already in flight for the old
+      // photo — abort it so a slow, stale response can't land after a newer
+      // one, and so a cleared photo doesn't leave a spinner running forever.
+      classifyAbortRef.current?.abort();
+      classifyAbortRef.current = null;
+      setClassifyingType(false);
+
+      if (file) {
+        const controller = new AbortController();
+        classifyAbortRef.current = controller;
+        setClassifyingType(true);
+        classifyItemType(file, controller.signal)
+          .then((type) => {
+            // Best-effort pre-fill only — never clobber a type the user has
+            // already typed themselves (matches the PRD requirement that
+            // this is a suggestion, always still manually editable/overridable
+            // via this form or later via Item Detail's Edit flow).
+            setMetadata((prev) => (prev.type.trim() ? prev : { ...prev, type }));
+          })
+          .catch((err) => {
+            if (isAbortError(err)) return;
+            console.warn('Item type auto-classification failed, leaving Type blank for manual entry:', err);
+          })
+          .finally(() => {
+            if (classifyAbortRef.current === controller) {
+              classifyAbortRef.current = null;
+              setClassifyingType(false);
+            }
+          });
+      }
+    }
   }
 
   async function handleGenerate() {
@@ -325,6 +370,9 @@ export default function UploadPage({ user }: { user: User }) {
       )}
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>2. Item details</h2>
+      {classifyingType && (
+        <p style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>AI 辨識中…</p>
+      )}
       <ItemMetadataForm value={metadata} onChange={setMetadata} nameRequired />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: '#aaa' }}>
