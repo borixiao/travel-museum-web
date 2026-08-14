@@ -16,7 +16,6 @@ import { modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromUrl } from '../services/stickerClient';
 import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
-import PhotoGallery from '../components/PhotoGallery';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { Item, ItemMetadata, Collection } from '../types';
 import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
@@ -357,6 +356,28 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     };
   }
 
+  // Shared style for the Item Detail action row (Edit / Generate Sticker /
+  // Add to Moodboard / Delete / Save / Cancel) — replaces the browser's
+  // unstyled default buttons with the same light/warm language as the rest
+  // of the redesigned screens.
+  function actionButtonStyle(variant: 'primary' | 'secondary' | 'danger', disabled = false): CSSProperties {
+    const base: CSSProperties = {
+      fontSize: 13,
+      fontWeight: 600,
+      padding: '8px 14px',
+      borderRadius: 10,
+      cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.5 : 1,
+    };
+    if (variant === 'primary') {
+      return { ...base, border: 'none', background: ACCENT, color: '#fff' };
+    }
+    if (variant === 'danger') {
+      return { ...base, border: '1px solid #e05555', background: CARD_BG, color: '#e05555' };
+    }
+    return { ...base, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG, color: TEXT_PRIMARY };
+  }
+
   // One row per collection (plus Uncategorized) in the Browse Memories list
   // below — factored out since the two call sites (named collections vs.
   // the Uncategorized bucket) are otherwise identical except for the delete
@@ -692,10 +713,10 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 <ItemMetadataForm value={editValue} onChange={setEditValue} />
                 {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={handleSaveEdit} disabled={savingEdit}>
+                  <button onClick={handleSaveEdit} disabled={savingEdit} style={actionButtonStyle('primary', savingEdit)}>
                     {savingEdit ? 'Saving…' : 'Save changes'}
                   </button>
-                  <button onClick={() => setEditing(false)} disabled={savingEdit}>
+                  <button onClick={() => setEditing(false)} disabled={savingEdit} style={actionButtonStyle('secondary', savingEdit)}>
                     Cancel
                   </button>
                 </div>
@@ -760,18 +781,26 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: -12, marginBottom: 12 }}>{collectionsError}</p>}
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <button onClick={startEdit} disabled={deleting}>
+                  <button onClick={startEdit} disabled={deleting} style={actionButtonStyle('secondary', deleting)}>
                     Edit
                   </button>
                   {selected.photos?.[0] && (
-                    <button onClick={handleGenerateSticker} disabled={generatingSticker || deleting}>
+                    <button
+                      onClick={handleGenerateSticker}
+                      disabled={generatingSticker || deleting}
+                      style={actionButtonStyle('secondary', generatingSticker || deleting)}
+                    >
                       {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
                     </button>
                   )}
-                  <button onClick={handleAddToMoodboard} disabled={addingToMoodboard || deleting}>
+                  <button
+                    onClick={handleAddToMoodboard}
+                    disabled={addingToMoodboard || deleting}
+                    style={actionButtonStyle('secondary', addingToMoodboard || deleting)}
+                  >
                     {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Moodboard'}
                   </button>
-                  <button onClick={handleDelete} disabled={deleting} style={{ color: '#e05555' }}>
+                  <button onClick={handleDelete} disabled={deleting} style={actionButtonStyle('danger', deleting)}>
                     {deleting ? 'Deleting…' : 'Delete'}
                   </button>
                 </div>
@@ -781,15 +810,15 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               </>
             )}
 
-            {selected.photos && selected.photos.length > 0 && (
-              <div style={{ marginTop: 16, marginBottom: 16 }}>
-                <h2 style={{ fontSize: 14, marginBottom: 6, color: TEXT_PRIMARY }}>Original photos</h2>
-                <PhotoGallery photos={selected.photos} />
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: TEXT_MUTED }}>
-              <label style={{ cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, fontSize: 12 }}>
+              <label
+                style={{
+                  cursor: savingBackgroundImage ? 'default' : 'pointer',
+                  color: TEXT_MUTED,
+                  textDecoration: 'underline',
+                  opacity: savingBackgroundImage ? 0.5 : 1,
+                }}
+              >
                 {savingBackgroundImage
                   ? 'Saving…'
                   : selected.backgroundImageUrl
@@ -807,7 +836,20 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 />
               </label>
               {selected.backgroundImageUrl && (
-                <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
+                <button
+                  onClick={handleRemoveBackgroundImage}
+                  disabled={savingBackgroundImage}
+                  style={{
+                    fontSize: 12,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: TEXT_MUTED,
+                    textDecoration: 'underline',
+                    cursor: savingBackgroundImage ? 'default' : 'pointer',
+                    opacity: savingBackgroundImage ? 0.5 : 1,
+                  }}
+                >
                   Remove image
                 </button>
               )}
