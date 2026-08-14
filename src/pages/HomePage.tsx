@@ -646,29 +646,120 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
 
       {selected ? (
         <div>
-          <button onClick={() => selectItem(null)} style={{ marginBottom: 12 }}>
-            ← Back to list
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <button
+              onClick={() => selectItem(null)}
+              aria-label="Back"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: CARD_BG,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                cursor: 'pointer',
+                fontSize: 18,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              ‹
+            </button>
+            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0, marginRight: 36 }}>Item Details</h1>
+          </div>
 
-          {editing ? (
-            <div style={{ marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Edit item details</h2>
-              <ItemMetadataForm value={editValue} onChange={setEditValue} />
-              {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button onClick={handleSaveEdit} disabled={savingEdit}>
-                  {savingEdit ? 'Saving…' : 'Save changes'}
-                </button>
-                <button onClick={() => setEditing(false)} disabled={savingEdit}>
-                  Cancel
-                </button>
+          <ModelViewer
+            url={modelProxyUrl(selected.modelUrl)}
+            fallbackMessage="This 3D model is no longer available. Please retake photos and regenerate."
+            backgroundImageUrl={selected.backgroundImageUrl}
+            height={320}
+          />
+
+          <div
+            style={{
+              background: CARD_BG,
+              borderRadius: 20,
+              marginTop: -20,
+              position: 'relative',
+              padding: '20px 16px 24px',
+            }}
+          >
+            {editing ? (
+              <div>
+                <h2 style={{ fontSize: 16, marginBottom: 8, color: TEXT_PRIMARY }}>Edit item details</h2>
+                <ItemMetadataForm value={editValue} onChange={setEditValue} />
+                {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={handleSaveEdit} disabled={savingEdit}>
+                    {savingEdit ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button onClick={() => setEditing(false)} disabled={savingEdit}>
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <h2 style={{ fontSize: 18, margin: 0 }}>{selected.name || 'Untitled item'}</h2>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: TEXT_MUTED }}>
+                  {[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}
+                </div>
+                <h2 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 8px', color: TEXT_PRIMARY }}>
+                  {selected.name || 'Untitled item'}
+                </h2>
+                {selected.story && <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}
+
+                {selected.emotionTags && selected.emotionTags.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                    {selected.emotionTags.map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontSize: 12,
+                          color: ACCENT,
+                          border: '1px solid ' + ACCENT,
+                          borderRadius: 999,
+                          padding: '2px 10px',
+                          background: PLACEHOLDER_BG,
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Matches the mockup's "Stored in <Collection>" card — repurposed
+                    to also be the collection-reassignment control (a plain <select>
+                    styled to sit inside the card) rather than a second, separate
+                    control elsewhere on the page. */}
+                <div style={{ border: '1px solid ' + BORDER_LIGHT, borderRadius: 14, padding: 12, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 2 }}>
+                    Stored in {selected.collectionId ? collections.find((c) => c.id === selected.collectionId)?.name ?? 'Uncategorized' : 'Uncategorized'}
+                  </div>
+                  <div style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 8 }}>
+                    Kept together with the other items, photos, and stories in this memory.
+                  </div>
+                  <select
+                    id="collection-select"
+                    value={selected.collectionId ?? ''}
+                    onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
+                    disabled={movingItem}
+                    style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT, padding: '3px 6px' }}
+                  >
+                    <option value="">Uncategorized</option>
+                    {collections.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {movingItem && <span style={{ fontSize: 12, color: TEXT_MUTED, marginLeft: 6 }}>Moving…</span>}
+                </div>
+                {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: -12, marginBottom: 12 }}>{collectionsError}</p>}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                   <button onClick={startEdit} disabled={deleting}>
                     Edit
                   </button>
@@ -684,97 +775,45 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     {deleting ? 'Deleting…' : 'Delete'}
                   </button>
                 </div>
-              </div>
-              {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{deleteError}</p>}
-              {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{stickerError}</p>}
-              {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{moodboardError}</p>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#888' }}>
-                <label htmlFor="collection-select">Collection:</label>
-                <select
-                  id="collection-select"
-                  value={selected.collectionId ?? ''}
-                  onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
-                  disabled={movingItem}
-                  style={{ fontSize: 12 }}
-                >
-                  <option value="">Uncategorized</option>
-                  {collections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                {movingItem && <span>Moving…</span>}
-              </div>
-              {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{collectionsError}</p>}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 12, color: '#888' }}>
-                {selected.type && (
-                  <span style={{ border: '1px solid #555', borderRadius: 999, padding: '2px 8px' }}>{selected.type}</span>
-                )}
-                {selected.location && <span>📍 {selected.location}</span>}
-                {selected.date && <span>📅 {selected.date}</span>}
-              </div>
-              {selected.emotionTags && selected.emotionTags.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                  {selected.emotionTags.map((tag) => (
-                    <span
-                      key={tag}
-                      style={{
-                        fontSize: 12,
-                        color: '#6ea8ff',
-                        border: '1px solid #6ea8ff',
-                        borderRadius: 999,
-                        padding: '2px 10px',
-                        background: 'rgba(110, 168, 255, 0.15)',
-                      }}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {selected.story && <p style={{ marginTop: 8, fontSize: 13, color: '#aaa' }}>{selected.story}</p>}
-            </div>
-          )}
-
-          {selected.photos && selected.photos.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <h2 style={{ fontSize: 14, marginBottom: 6 }}>Original photos</h2>
-              <PhotoGallery photos={selected.photos} />
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12, color: '#888' }}>
-            <label style={{ cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
-              {savingBackgroundImage
-                ? 'Saving…'
-                : selected.backgroundImageUrl
-                  ? 'Change background image'
-                  : 'Upload background image'}
-              <input
-                type="file"
-                accept="image/*"
-                disabled={savingBackgroundImage}
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  handleBackgroundImageChange(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-            {selected.backgroundImageUrl && (
-              <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
-                Remove image
-              </button>
+                {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{deleteError}</p>}
+                {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{stickerError}</p>}
+                {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{moodboardError}</p>}
+              </>
             )}
-          </div>
-          {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginBottom: 8 }}>{backgroundImageError}</p>}
 
-          <ModelViewer
-            url={modelProxyUrl(selected.modelUrl)}
-            fallbackMessage="This 3D model is no longer available. Please retake photos and regenerate."
-            backgroundImageUrl={selected.backgroundImageUrl}
-          />
+            {selected.photos && selected.photos.length > 0 && (
+              <div style={{ marginTop: 16, marginBottom: 16 }}>
+                <h2 style={{ fontSize: 14, marginBottom: 6, color: TEXT_PRIMARY }}>Original photos</h2>
+                <PhotoGallery photos={selected.photos} />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: TEXT_MUTED }}>
+              <label style={{ cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
+                {savingBackgroundImage
+                  ? 'Saving…'
+                  : selected.backgroundImageUrl
+                    ? 'Change background image'
+                    : 'Upload background image'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={savingBackgroundImage}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    handleBackgroundImageChange(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {selected.backgroundImageUrl && (
+                <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
+                  Remove image
+                </button>
+              )}
+            </div>
+            {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{backgroundImageError}</p>}
+          </div>
         </div>
       ) : (
         items.length > 0 && (
