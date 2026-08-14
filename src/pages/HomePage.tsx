@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { User } from 'firebase/auth';
 import {
@@ -21,9 +21,8 @@ import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataF
 import type { Item, ItemMetadata, Collection } from '../types';
 import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
 
-// Sentinels for the collection tab selector — never persisted, only used as
-// the `selectedCollectionId` UI state's "no real collection selected" values.
-const ALL_COLLECTIONS = '__all__';
+// Ref-map key for the Uncategorized row (scroll-to-row target) — distinct
+// from any real Collection id, which are Firestore-generated document ids.
 const UNCATEGORIZED = '__uncategorized__';
 
 
@@ -68,25 +67,31 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
   const [photoURL, setPhotoURL] = useState<string | null>(null);
 
   // PRD 4.2 "My Collections" — named groupings the user creates to organize
-  // items. `selectedCollectionId` is one of ALL_COLLECTIONS/UNCATEGORIZED or
-  // a real Collection's id; kept separate from the §4.6 filter/sort state
-  // below since a collection is a coarser, user-authored grouping rather
-  // than a derived filter, but both narrow the same `items` array together.
+  // items, now the primary way to browse Home (one row per collection —
+  // see the collection-rows list below). `movingItem` is still used by the
+  // Item Detail view's own Collection picker.
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(ALL_COLLECTIONS);
   const [creatingCollection, setCreatingCollection] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [savingCollection, setSavingCollection] = useState(false);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [movingItem, setMovingItem] = useState(false);
 
-  // PRD 4.6 Collection Screen — search / filter / sort. All client-side: the
-  // whole collection is already fetched in one shot (getItems has no
-  // pagination), so there's no reason to round-trip to Firestore again just
-  // to re-slice data already sitting in `items`.
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('All');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'location' | 'type'>('newest');
+  // Browse-Memories chips are quick-jump links into the collection-rows list
+  // below, not filters — `rowRefs` holds each row's DOM node (keyed by
+  // Collection id, or UNCATEGORIZED for the Uncategorized row) so a chip
+  // click can smooth-scroll straight to it; `topRef` is the "All Items"
+  // chip's target (back to the top of the list).
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const topRef = useRef<HTMLDivElement>(null);
+
+  function scrollToRow(key: string) {
+    if (key === 'top') {
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    rowRefs.current.get(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -123,59 +128,31 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     };
   }, [user]);
 
-  // Filter tabs derived from whatever `type` values actually exist in this
-  // user's collection, rather than PRD's hardcoded Tickets/Magnets/Postcards/
-  // Other — the app's Type field is free text (ITEM_TYPE_PRESETS are just
-  // suggestions, see types.ts), so a fixed 4-tab set would either miss most
-  // real values or bucket everything into "Other".
-  const typeOptions = useMemo(() => {
-    const seen = new Set<string>();
-    items.forEach((item) => {
-      if (item.type) seen.add(item.type);
-    });
-    return ['All', ...Array.from(seen).sort((a, b) => a.localeCompare(b))];
-  }, [items]);
-
-  // PRD 4.2 "Recent items rail (latest 4, horizontal scroll)" — deliberately
-  // independent of the search/filter/sort controls below (those apply to the
-  // full Collection grid); this always shows the true most-recently-added 4,
-  // sourced straight from `items`, which Firestore already returns newest
-  // first (see displayedItems' 'oldest' comment below).
+  // PRD 4.2 "Recent items rail (latest 4, horizontal scroll)" — always shows
+  // the true most-recently-added 4, sourced straight from `items`, which
+  // Firestore already returns newest first.
   const recentItems = useMemo(() => items.slice(0, 4), [items]);
 
-  const displayedItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    let result = items.filter((item) => {
-      if (selectedCollectionId === UNCATEGORIZED && item.collectionId) return false;
-      if (
-        selectedCollectionId !== ALL_COLLECTIONS &&
-        selectedCollectionId !== UNCATEGORIZED &&
-        item.collectionId !== selectedCollectionId
-      ) {
-        return false;
+  // Groups items by collection for the one-row-per-collection browse list
+  // below. An item whose `collectionId` doesn't match any current Collection
+  // (the collection it pointed to was since deleted, or it predates this
+  // feature) falls into Uncategorized right alongside items with no
+  // collectionId at all — same convention `deleteCollection` already uses.
+  const itemsByCollection = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    for (const c of collections) map.set(c.id, []);
+    for (const item of items) {
+      if (item.collectionId && map.has(item.collectionId)) {
+        map.get(item.collectionId)!.push(item);
       }
-      if (filterType !== 'All' && item.type !== filterType) return false;
-      if (!q) return true;
-      return (
-        (item.name ?? '').toLowerCase().includes(q) ||
-        (item.location ?? '').toLowerCase().includes(q) ||
-        (item.type ?? '').toLowerCase().includes(q)
-      );
-    });
-
-    if (sortBy === 'oldest') {
-      // `items` already arrives newest-first (Firestore query orders by
-      // createdAt desc) — reversing the already-filtered array is enough,
-      // no need to parse the Firestore Timestamp in `createdAt` at all.
-      result = [...result].reverse();
-    } else if (sortBy === 'location') {
-      result = [...result].sort((a, b) => (a.location ?? '').localeCompare(b.location ?? ''));
-    } else if (sortBy === 'type') {
-      result = [...result].sort((a, b) => (a.type ?? '').localeCompare(b.type ?? ''));
     }
-    // 'newest' needs no resort — that's the order `items` is already in.
-    return result;
-  }, [items, searchQuery, filterType, sortBy, selectedCollectionId]);
+    return map;
+  }, [items, collections]);
+
+  const uncategorizedItems = useMemo(
+    () => items.filter((item) => !item.collectionId || !collections.some((c) => c.id === item.collectionId)),
+    [items, collections],
+  );
 
   function selectItem(item: Item | null) {
     setSelected(item);
@@ -245,9 +222,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     try {
       const created = await createCollection(user.uid, name);
       setCollections((prev) => [...prev, created]);
-      setSelectedCollectionId(created.id);
       setNewCollectionName('');
       setCreatingCollection(false);
+      // The new row's ref isn't registered until the `collections` update
+      // above actually commits/renders — deferring one tick is enough for
+      // that to happen before we try to scroll to it.
+      setTimeout(() => scrollToRow(created.id), 0);
     } catch (err) {
       setCollectionsError(err instanceof Error ? err.message : 'Failed to create collection');
     } finally {
@@ -270,7 +250,6 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
       setItems((prev) =>
         prev.map((it) => (it.collectionId === collectionToDelete.id ? { ...it, collectionId: undefined } : it))
       );
-      if (selectedCollectionId === collectionToDelete.id) setSelectedCollectionId(ALL_COLLECTIONS);
     } catch (err) {
       setCollectionsError(err instanceof Error ? err.message : 'Failed to delete collection');
     }
@@ -360,20 +339,88 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     }
   }
 
-  // Shared pill style for the collection/type filter chip rows below —
-  // selected = solid dark fill, unselected = light outline — matching the
-  // "Memory Museum" design mockup's chip treatment.
-  function chipStyle(active: boolean): CSSProperties {
+  // Shared pill style for the Browse Memories chip row — these are quick-
+  // jump links into the collection-rows list below (see scrollToRow), not
+  // filters, so there's no persistent "selected" chip. `emphasized` just
+  // matches the mockup's "全部/All Items" chip being the one solid-filled
+  // pill among otherwise-outlined ones.
+  function chipStyle(emphasized: boolean): CSSProperties {
     return {
       flexShrink: 0,
       fontSize: 12,
       padding: '6px 12px',
       borderRadius: 999,
-      border: '1px solid ' + (active ? TEXT_PRIMARY : BORDER_LIGHT),
-      background: active ? TEXT_PRIMARY : CARD_BG,
-      color: active ? '#fff' : TEXT_PRIMARY,
+      border: '1px solid ' + (emphasized ? TEXT_PRIMARY : BORDER_LIGHT),
+      background: emphasized ? TEXT_PRIMARY : CARD_BG,
+      color: emphasized ? '#fff' : TEXT_PRIMARY,
       cursor: 'pointer',
     };
+  }
+
+  // One row per collection (plus Uncategorized) in the Browse Memories list
+  // below — factored out since the two call sites (named collections vs.
+  // the Uncategorized bucket) are otherwise identical except for the delete
+  // button, which only makes sense on a real Collection.
+  function renderCollectionRow(key: string, name: string, rowItems: Item[], onDelete?: () => void) {
+    return (
+      <div
+        key={key}
+        ref={(el) => {
+          if (el) rowRefs.current.set(key, el);
+          else rowRefs.current.delete(key);
+        }}
+        style={{ background: CARD_BG, border: '1px solid ' + BORDER_LIGHT, borderRadius: 16, padding: 14 }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY }}>{name}</div>
+            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+              {rowItems.length} item{rowItems.length === 1 ? '' : 's'}
+            </div>
+          </div>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              title="Delete collection"
+              style={{ flexShrink: 0, background: 'none', border: 'none', color: '#e05555', cursor: 'pointer', fontSize: 13, padding: 4 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {rowItems.length > 0 ? (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', paddingBottom: 2 }}>
+            {rowItems.slice(0, 6).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => selectItem(item)}
+                style={{
+                  flexShrink: 0,
+                  width: 64,
+                  height: 64,
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  border: '1px solid ' + BORDER_LIGHT,
+                  padding: 0,
+                  cursor: 'pointer',
+                  background: PLACEHOLDER_BG,
+                }}
+              >
+                {(item.stickerUrl ?? item.photos?.[0]) && (
+                  <img
+                    src={item.stickerUrl ?? item.photos![0]}
+                    alt={item.name || 'item'}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 10, marginBottom: 0 }}>No items yet.</p>
+        )}
+      </div>
+    );
   }
 
   if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Loading your collection…</p>;
@@ -530,30 +577,19 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
       )}
 
       {!selected && items.length > 0 && (
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 20 }} ref={topRef}>
           <h2 style={{ fontSize: 14, color: TEXT_PRIMARY, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
-            <button onClick={() => setSelectedCollectionId(ALL_COLLECTIONS)} style={chipStyle(selectedCollectionId === ALL_COLLECTIONS)}>
+            <button onClick={() => scrollToRow('top')} style={chipStyle(true)}>
               All Items
             </button>
-            <button onClick={() => setSelectedCollectionId(UNCATEGORIZED)} style={chipStyle(selectedCollectionId === UNCATEGORIZED)}>
+            <button onClick={() => scrollToRow(UNCATEGORIZED)} style={chipStyle(false)}>
               Uncategorized
             </button>
             {collections.map((c) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <button onClick={() => setSelectedCollectionId(c.id)} style={chipStyle(selectedCollectionId === c.id)}>
-                  {c.name}
-                </button>
-                {selectedCollectionId === c.id && (
-                  <button
-                    onClick={() => handleDeleteCollection(c)}
-                    title="Delete collection"
-                    style={{ marginLeft: 2, fontSize: 11, color: '#e05555', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+              <button key={c.id} onClick={() => scrollToRow(c.id)} style={chipStyle(false)}>
+                {c.name}
+              </button>
             ))}
             {creatingCollection ? (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
@@ -605,53 +641,6 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
             )}
           </div>
           {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 6 }}>{collectionsError}</p>}
-        </div>
-      )}
-
-      {!selected && items.length > 0 && (
-        <div style={{ marginTop: 12, marginBottom: 12 }}>
-          <input
-            type="search"
-            placeholder="Search by name, location, or type…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid ' + BORDER_LIGHT,
-              background: CARD_BG,
-              color: TEXT_PRIMARY,
-            }}
-          />
-
-          {typeOptions.length > 1 && (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 8, paddingBottom: 4 }}>
-              {typeOptions.map((t) => (
-                <button key={t} onClick={() => setFilterType(t)} style={chipStyle(filterType === t)}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12 }}>
-            <label htmlFor="sort-select" style={{ color: TEXT_MUTED }}>
-              Sort:
-            </label>
-            <select
-              id="sort-select"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT, padding: '3px 6px' }}
-            >
-              <option value="newest">Date (newest first)</option>
-              <option value="oldest">Date (oldest first)</option>
-              <option value="location">Location (A–Z)</option>
-              <option value="type">Type (A–Z)</option>
-            </select>
-          </div>
         </div>
       )}
 
@@ -787,45 +776,13 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
             backgroundImageUrl={selected.backgroundImageUrl}
           />
         </div>
-      ) : displayedItems.length === 0 && items.length > 0 ? (
-        <p style={{ color: '#888', fontSize: 13 }}>No items match your search/filter.</p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
-          {displayedItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => selectItem(item)}
-              style={{
-                border: '1px solid ' + BORDER_LIGHT,
-                borderRadius: 12,
-                padding: 0,
-                overflow: 'hidden',
-                cursor: 'pointer',
-                background: CARD_BG,
-                textAlign: 'left',
-              }}
-            >
-              {item.stickerUrl ?? item.photos?.[0] ? (
-                <img
-                  src={item.stickerUrl ?? item.photos![0]}
-                  alt="item thumbnail"
-                  style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
-                />
-              ) : (
-                <div style={{ width: '100%', height: 120, background: PLACEHOLDER_BG }} />
-              )}
-              <div style={{ padding: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.name || 'Untitled item'}
-                </div>
-                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
-                  {item.type ?? 'Click to view 3D model'}
-                  {item.location ? ` · ${item.location}` : ''}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+        items.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {collections.map((c) => renderCollectionRow(c.id, c.name, itemsByCollection.get(c.id) ?? [], () => handleDeleteCollection(c)))}
+            {uncategorizedItems.length > 0 && renderCollectionRow(UNCATEGORIZED, 'Uncategorized', uncategorizedItems)}
+          </div>
+        )
       )}
     </div>
   );
