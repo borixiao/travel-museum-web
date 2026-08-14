@@ -19,24 +19,13 @@ import ModelViewer from '../components/ModelViewer';
 import PhotoGallery from '../components/PhotoGallery';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { Item, ItemMetadata, Collection } from '../types';
+import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
 
 // Sentinels for the collection tab selector — never persisted, only used as
 // the `selectedCollectionId` UI state's "no real collection selected" values.
 const ALL_COLLECTIONS = '__all__';
 const UNCATEGORIZED = '__uncategorized__';
 
-// Light/warm palette for the browse view (hero, chips, item grid), matching
-// the "Memory Museum" visual design mockup. Kept as plain constants (not a
-// theme file) to match this codebase's existing inline-style convention —
-// the Item Detail screen below is a separate PRD screen not covered by this
-// pass and intentionally left in its prior styling.
-const PAGE_BG = '#faf7f4';
-const CARD_BG = '#ffffff';
-const TEXT_PRIMARY = '#1c1917';
-const TEXT_MUTED = '#8a8078';
-const BORDER_LIGHT = '#e8e1d8';
-const ACCENT = '#a1552e';
-const PLACEHOLDER_BG = '#efe8df';
 
 function metadataOf(item: Item): ItemMetadata {
   return {
