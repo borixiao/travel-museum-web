@@ -18,7 +18,7 @@ import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { Item, ItemMetadata, Collection } from '../types';
-import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
+import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG, actionButtonStyle } from '../theme';
 
 // Ref-map key for the Uncategorized row (scroll-to-row target) — distinct
 // from any real Collection id, which are Firestore-generated document ids.
@@ -356,27 +356,6 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     };
   }
 
-  // Shared style for the Item Detail action row (Edit / Generate Sticker /
-  // Add to Moodboard / Delete / Save / Cancel) — replaces the browser's
-  // unstyled default buttons with the same light/warm language as the rest
-  // of the redesigned screens.
-  function actionButtonStyle(variant: 'primary' | 'secondary' | 'danger', disabled = false): CSSProperties {
-    const base: CSSProperties = {
-      fontSize: 13,
-      fontWeight: 600,
-      padding: '8px 14px',
-      borderRadius: 10,
-      cursor: disabled ? 'default' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
-    };
-    if (variant === 'primary') {
-      return { ...base, border: 'none', background: ACCENT, color: '#fff' };
-    }
-    if (variant === 'danger') {
-      return { ...base, border: '1px solid #e05555', background: CARD_BG, color: '#e05555' };
-    }
-    return { ...base, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG, color: TEXT_PRIMARY };
-  }
 
   // One row per collection (plus Uncategorized) in the Browse Memories list
   // below — factored out since the two call sites (named collections vs.

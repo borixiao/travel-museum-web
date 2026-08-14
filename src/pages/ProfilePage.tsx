@@ -9,8 +9,10 @@ import {
 import { auth } from '../firebase';
 import { getOrCreateUserProfile, updateUserAvatar, updateUserDisplayName } from '../services/users';
 import { getItems } from '../services/items';
+import { getCollections } from '../services/collections';
 import { getOrCreateMoodboard } from '../services/moodboard';
 import type { UserProfile } from '../types';
+import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG, actionButtonStyle } from '../theme';
 
 /** "Jane Doe" -> "JD", falls back to the first letter of the email local-part
  *  ("jane@x.com" -> "J") for accounts with no display name at all. */
@@ -45,7 +47,13 @@ export default function ProfilePage({ user }: { user: User }) {
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const [itemCount, setItemCount] = useState<number | null>(null);
-  const [cardCount, setCardCount] = useState<number | null>(null);
+  const [collectionCount, setCollectionCount] = useState<number | null>(null);
+  // Only `id`/`published` are needed here (for the Shared Links row's
+  // copy-link action) — the full board (cards, background, etc.) belongs to
+  // MoodboardPage, not this summary.
+  const [moodboard, setMoodboard] = useState<{ id: string; published: boolean } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -83,12 +91,19 @@ export default function ProfilePage({ user }: { user: User }) {
       .catch(() => {
         if (!cancelled) setItemCount(null);
       });
-    getOrCreateMoodboard(user.uid)
-      .then((board) => {
-        if (!cancelled) setCardCount(board.cards.length);
+    getCollections(user.uid)
+      .then((cols) => {
+        if (!cancelled) setCollectionCount(cols.length);
       })
       .catch(() => {
-        if (!cancelled) setCardCount(null);
+        if (!cancelled) setCollectionCount(null);
+      });
+    getOrCreateMoodboard(user.uid)
+      .then((board) => {
+        if (!cancelled) setMoodboard({ id: board.id, published: board.published });
+      })
+      .catch(() => {
+        if (!cancelled) setMoodboard(null);
       });
     return () => {
       cancelled = true;
@@ -175,15 +190,38 @@ export default function ProfilePage({ user }: { user: User }) {
     }
   }
 
+  async function handleCopyMoodboardLink() {
+    if (!moodboard?.published) return;
+    const url = `${window.location.origin}/m/${moodboard.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail (permissions, insecure context) — not worth
+      // its own error state for a "nice to have" copy shortcut; the user can
+      // still get the link from the Moodboard tab's own Publish controls.
+    }
+  }
+
   const displayName = profile?.displayName ?? user.displayName ?? '';
   const memberSince = formatMemberSince(profile?.createdAt);
 
   return (
-    <div style={{ maxWidth: 480, margin: '40px auto', padding: '0 16px' }}>
-      <h1 style={{ fontSize: 20 }}>Profile</h1>
+    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+      <h1 style={{ textAlign: 'center', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Profile</h1>
       {profileError && <p style={{ color: 'crimson', fontSize: 13 }}>{profileError}</p>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16 }}>
+      {/* Account card — dotted background matches the collection-row/scan-
+          wizard treatment elsewhere, so the avatar reads as "floating" on
+          it the same way a scanned photo does. */}
+      <div
+        style={{
+          borderRadius: 20,
+          padding: 20,
+          background: `${PLACEHOLDER_BG} radial-gradient(circle, ${BORDER_LIGHT} 1px, transparent 1px) 0 0 / 16px 16px`,
+        }}
+      >
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -194,33 +232,20 @@ export default function ProfilePage({ user }: { user: User }) {
             width: 72,
             height: 72,
             borderRadius: '50%',
-            border: '1px solid #444',
+            border: '3px solid ' + CARD_BG,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             padding: 0,
             overflow: 'hidden',
-            cursor: 'pointer',
-            background: '#333',
+            cursor: avatarUploading ? 'default' : 'pointer',
+            background: TEXT_PRIMARY,
             flexShrink: 0,
           }}
         >
           {profile?.photoURL ? (
             <img src={profile.photoURL} alt="Your avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           ) : (
-            <span style={{ fontSize: 24, color: '#ddd' }}>{initialsFor(displayName, user.email)}</span>
+            <span style={{ fontSize: 24, color: '#fff' }}>{initialsFor(displayName, user.email)}</span>
           )}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              background: 'rgba(0,0,0,0.6)',
-              color: '#fff',
-              fontSize: 10,
-              padding: '2px 0',
-            }}
-          >
-            {avatarUploading ? '…' : 'Change'}
-          </div>
         </button>
         <input
           ref={fileInputRef}
@@ -230,117 +255,200 @@ export default function ProfilePage({ user }: { user: User }) {
           onChange={(e) => handleAvatarFileChange(e.target.files?.[0])}
         />
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {editingName ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                autoFocus
-                style={{ flex: 1, minWidth: 0 }}
-              />
-              <button onClick={handleSaveName} disabled={savingName}>
-                {savingName ? '…' : 'Save'}
-              </button>
-              <button type="button" onClick={() => setEditingName(false)} disabled={savingName}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>{displayName || 'Add your name'}</span>
-              <button type="button" onClick={startEditingName} style={{ fontSize: 11, background: 'none', border: 'none', color: '#6ea8ff', cursor: 'pointer', padding: 0 }}>
-                Edit
-              </button>
-            </div>
-          )}
-          <p style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{user.email}</p>
-        </div>
-      </div>
-      {nameError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{nameError}</p>}
-      {avatarError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{avatarError}</p>}
+        {memberSince && <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 14 }}>Member since {memberSince}</div>}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
-        <div style={{ flex: 1, border: '1px solid #333', borderRadius: 6, padding: 10, textAlign: 'center' }}>
-          <div style={{ fontSize: 18 }}>{itemCount ?? '—'}</div>
-          <div style={{ fontSize: 11, color: '#888' }}>Items</div>
-        </div>
-        <div style={{ flex: 1, border: '1px solid #333', borderRadius: 6, padding: 10, textAlign: 'center' }}>
-          <div style={{ fontSize: 18 }}>{cardCount ?? '—'}</div>
-          <div style={{ fontSize: 11, color: '#888' }}>Moodboard cards</div>
-        </div>
-        <div style={{ flex: 1, border: '1px solid #333', borderRadius: 6, padding: 10, textAlign: 'center' }}>
-          <div style={{ fontSize: 13 }}>{memberSince ?? '—'}</div>
-          <div style={{ fontSize: 11, color: '#888' }}>Member since</div>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        {!showPasswordForm ? (
-          <button
-            type="button"
-            onClick={() => {
-              setShowPasswordForm(true);
-              setPasswordError(null);
-              setPasswordSuccess(null);
-            }}
-          >
-            Change password
-          </button>
+        {editingName ? (
+          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              autoFocus
+              style={{ flex: 1, minWidth: 0, fontSize: 20, borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '4px 8px' }}
+            />
+            <button onClick={handleSaveName} disabled={savingName} style={actionButtonStyle('primary', savingName)}>
+              {savingName ? '…' : 'Save'}
+            </button>
+            <button type="button" onClick={() => setEditingName(false)} disabled={savingName} style={actionButtonStyle('secondary', savingName)}>
+              Cancel
+            </button>
+          </div>
         ) : (
-          <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 280 }}>
-            <h2 style={{ fontSize: 14, margin: 0 }}>Change password</h2>
-            <input
-              type="password"
-              placeholder="Current password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              placeholder="New password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-            {passwordError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{passwordError}</p>}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" disabled={passwordBusy}>
-                {passwordBusy ? 'Saving…' : 'Save password'}
-              </button>
-              <button
-                type="button"
-                disabled={passwordBusy}
-                onClick={() => {
-                  setShowPasswordForm(false);
-                  setCurrentPassword('');
-                  setNewPassword('');
-                  setConfirmNewPassword('');
-                  setPasswordError(null);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 28, fontWeight: 700 }}>{displayName || 'Add your name'}</span>
+            <button
+              type="button"
+              onClick={startEditingName}
+              style={{ fontSize: 12, background: 'none', border: 'none', color: TEXT_MUTED, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+            >
+              Edit
+            </button>
+          </div>
         )}
-        {passwordSuccess && !showPasswordForm && <p style={{ color: '#6ea8ff', fontSize: 12, marginTop: 8 }}>{passwordSuccess}</p>}
+        <div style={{ fontSize: 13, color: TEXT_MUTED, marginTop: 2 }}>
+          {collectionCount ?? '—'} memor{collectionCount === 1 ? 'y' : 'ies'} · {itemCount ?? '—'} item{itemCount === 1 ? '' : 's'}
+        </div>
+        {nameError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{nameError}</p>}
+        {avatarError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{avatarError}</p>}
       </div>
 
-      <button onClick={() => signOut(auth)} style={{ marginTop: 32 }}>
-        Sign out
+      {/* Shared Links row — tapping copies the public Moodboard link when
+          one's been published; inert otherwise (nothing to copy yet). */}
+      <button
+        type="button"
+        onClick={handleCopyMoodboardLink}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          width: '100%',
+          textAlign: 'left',
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 16,
+          border: '1px solid ' + BORDER_LIGHT,
+          background: CARD_BG,
+          cursor: moodboard?.published ? 'pointer' : 'default',
+        }}
+      >
+        <span
+          style={{
+            width: 40,
+            height: 40,
+            flexShrink: 0,
+            borderRadius: 12,
+            background: PLACEHOLDER_BG,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+          }}
+        >
+          🔗
+        </span>
+        <span>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: TEXT_PRIMARY }}>Shared Links</span>
+          <span style={{ display: 'block', fontSize: 12, color: TEXT_MUTED, marginTop: 1 }}>
+            {linkCopied ? 'Link copied!' : moodboard?.published ? 'Tap to copy your Moodboard link' : 'No shared links yet'}
+          </span>
+        </span>
       </button>
+
+      {/* Settings row — expands the account-management controls below
+          (name editing already lives on the card above; this covers
+          password + sign out) rather than navigating to a separate screen. */}
+      <button
+        type="button"
+        onClick={() => setSettingsOpen((o) => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          width: '100%',
+          textAlign: 'left',
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 16,
+          border: '1px solid ' + BORDER_LIGHT,
+          background: CARD_BG,
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            width: 40,
+            height: 40,
+            flexShrink: 0,
+            borderRadius: 12,
+            background: PLACEHOLDER_BG,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+          }}
+        >
+          ⚙️
+        </span>
+        <span>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: TEXT_PRIMARY }}>Settings</span>
+          <span style={{ display: 'block', fontSize: 12, color: TEXT_MUTED, marginTop: 1 }}>Password & account</span>
+        </span>
+      </button>
+
+      {settingsOpen && (
+        <div style={{ marginTop: 8, padding: 14, borderRadius: 16, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG }}>
+          <div style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 10 }}>{user.email}</div>
+
+          {!showPasswordForm ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowPasswordForm(true);
+                setPasswordError(null);
+                setPasswordSuccess(null);
+              }}
+              style={actionButtonStyle('secondary')}
+            >
+              Change password
+            </button>
+          ) : (
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <h2 style={{ fontSize: 14, margin: 0, color: TEXT_PRIMARY }}>Change password</h2>
+              <input
+                type="password"
+                placeholder="Current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+              />
+              <input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                required
+                minLength={6}
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+              />
+              {passwordError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{passwordError}</p>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" disabled={passwordBusy} style={actionButtonStyle('primary', passwordBusy)}>
+                  {passwordBusy ? 'Saving…' : 'Save password'}
+                </button>
+                <button
+                  type="button"
+                  disabled={passwordBusy}
+                  onClick={() => {
+                    setShowPasswordForm(false);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmNewPassword('');
+                    setPasswordError(null);
+                  }}
+                  style={actionButtonStyle('secondary', passwordBusy)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+          {passwordSuccess && !showPasswordForm && <p style={{ color: ACCENT, fontSize: 12, marginTop: 8 }}>{passwordSuccess}</p>}
+
+          <button onClick={() => signOut(auth)} style={{ ...actionButtonStyle('danger'), marginTop: 12 }}>
+            Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
