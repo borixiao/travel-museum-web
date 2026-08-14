@@ -26,12 +26,19 @@ export default function ModelViewer({
   interactive = true,
   height = 480,
   backgroundImageUrl,
+  transparentBackground = false,
 }: {
   url: string;
   fallbackMessage?: string;
   /** Custom image shown behind the model instead of the plain white default
    *  (see Item.backgroundImageUrl / the Item Detail "background image" upload). */
   backgroundImageUrl?: string;
+  /** Skip the plain-white default entirely and let whatever's behind this
+   *  component (e.g. a Moodboard card sitting on the board's own background/
+   *  image) show through instead — the Canvas itself already renders with
+   *  an alpha-enabled WebGL context, so this only has to stop the wrapper
+   *  <div> from painting over it. Ignored when backgroundImageUrl is set. */
+  transparentBackground?: boolean;
   // Moodboard cards embed this as a passive preview (Sticker/3D toggle) while
   // still sitting inside the card's own move/rotate/resize pointer-capture
   // drag system — OrbitControls' pointer-drag camera control would otherwise
@@ -55,7 +62,7 @@ export default function ModelViewer({
           pointerEvents: interactive ? 'auto' : 'none',
           ...(backgroundImageUrl
             ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : { background: '#ffffff' }),
+            : { background: transparentBackground ? 'transparent' : '#ffffff' }),
         }}
       >
         <Canvas camera={{ position: [0, 0, 3], fov: 45 }}>
