@@ -84,6 +84,19 @@ async function normalizeForSticker(buffer) {
     .toBuffer();
 }
 
+// Reference image sent to the vision-classification chat completion below.
+// Smaller than either of the two above — this only needs to be legible
+// enough for coarse "what kind of object is this" classification, not fine
+// detail, and OpenAI bills vision input by image size/tile count, so keeping
+// it small keeps this (auto-run on every front-photo pick) cheap.
+async function normalizeForClassification(buffer) {
+  return sharp(buffer)
+    .rotate()
+    .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
 async function uploadImageToTripo(buffer, originalname) {
   const jpegBuffer = await normalizeForTripo(buffer);
   const form = new FormData();
@@ -299,6 +312,76 @@ app.post('/api/sticker', upload.single('photo'), async (req, res) => {
     const pngBuffer = Buffer.from(b64, 'base64');
     res.set('Content-Type', 'image/png');
     res.send(pngBuffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Best-effort auto-classification of an item's Type field (PRD 4.3 Add Item
+// Screen), run automatically as soon as the user picks the "front" photo in
+// UploadPage.tsx. Uses a vision-capable chat model (cheaper/faster than
+// gpt-image-2, and this only needs a short text label back, not an image) to
+// suggest a short category label from the photo. The client only prefills
+// the Type field with this — it's always still a plain editable text input,
+// never authoritative, matching every other AI feature in this app (sticker
+// generation, background removal) being a fallback-safe enhancement rather
+// than a blocking step.
+app.post('/api/classify-item', upload.single('photo'), async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY not set on server' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Missing photo file' });
+    }
+
+    const jpegBuffer = await normalizeForClassification(req.file.buffer);
+    const dataUrl = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+
+    const upstream = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 20,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text:
+                  'This is a photo of a personal travel keepsake item. Reply with ONLY a short category ' +
+                  'label for what kind of object it is (1-3 words — e.g. "Drink", "Souvenir", "Ticket", ' +
+                  '"Postcard", "Magnet", "Toy", "Book", "Clothing", "Bottle"). No punctuation, no ' +
+                  'explanation, just the label.',
+              },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const json = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: json.error?.message || 'Item classification failed' });
+    }
+
+    const raw = json.choices?.[0]?.message?.content?.trim();
+    if (!raw) {
+      return res.status(500).json({ error: 'Classification returned no result' });
+    }
+    // The model occasionally wraps its answer in quotes or a trailing period
+    // despite the "no punctuation" instruction — strip that so the UI never
+    // shows a stray quote mark or a truncated multi-sentence reply.
+    const type = raw.replace(/^["'.\s]+|["'.\s]+$/g, '').split('\n')[0].slice(0, 40);
+
+    res.json({ type });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
