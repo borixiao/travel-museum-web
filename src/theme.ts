@@ -79,6 +79,69 @@ export function chipStyle(active: boolean): CSSProperties {
   };
 }
 
+/** Sticky header wrapper for the Home screen's CTA grid + filter chips
+ *  (spec's `.memory-sticky`) — stays pinned above the scrolling collection
+ *  list, with the ambient background showing faintly through a blur rather
+ *  than a hard-edged bar. */
+export const stickyHeaderStyle: CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 14,
+  padding: '0 18px 14px',
+  background: `color-mix(in oklch, ${BG} 94%, transparent)`,
+  backdropFilter: 'blur(16px)',
+};
+
+/** The two Home-screen CTA entries (spec's `.memory-create-entry` /
+ *  `.memory-scan-entry`) — "create" is a dashed-border neutral card,
+ *  "scan" is the one solid-accent-filled entry (this app's "Scan a Photo"). */
+export function entryButtonStyle(variant: 'scan' | 'create'): CSSProperties {
+  const base: CSSProperties = {
+    width: '100%',
+    minHeight: 92,
+    padding: 12,
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderRadius: 16,
+    textAlign: 'left',
+    cursor: 'pointer',
+  };
+  if (variant === 'scan') {
+    return { ...base, border: '1px solid ' + ACCENT, background: ACCENT, color: SURFACE };
+  }
+  return {
+    ...base,
+    border: `1px dashed color-mix(in oklch, ${FG} 42%, ${BORDER})`,
+    background: SURFACE,
+    color: FG,
+  };
+}
+
+/** Icon circle inside an entry button — swaps to a translucent-on-accent
+ *  fill for the "scan" variant instead of the neutral SOFT background. */
+export function entryIconWrapStyle(variant: 'scan' | 'create'): CSSProperties {
+  return {
+    width: 36,
+    height: 36,
+    flexShrink: 0,
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '50%',
+    background: variant === 'scan' ? `color-mix(in oklch, ${SURFACE} 16%, transparent)` : SOFT,
+  };
+}
+
+/** Section label above the filter chips (spec's `.memory-gallery-label`). */
+export const galleryLabelStyle: CSSProperties = {
+  margin: '12px -18px 0',
+  padding: '12px 18px 0',
+  borderTop: '1px solid ' + BORDER,
+  color: MUTED,
+  font: `10px ${FONT_MONO}`,
+  letterSpacing: '.1em',
+};
+
 /** Primary/secondary/danger action button (spec's `.btn`/`.btn-primary`/
  *  `.btn-secondary`). Danger has no equivalent in the design system (delete
  *  in the prototype is a hold-and-confirm gesture, not a red button) — kept

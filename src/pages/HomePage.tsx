@@ -16,8 +16,25 @@ import { generateStickerFromUrl } from '../services/stickerClient';
 import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
+import Icon from '../components/Icon';
 import type { Item, ItemMetadata, Collection } from '../types';
-import { SURFACE, FG, MUTED, BORDER, ACCENT, SOFT, actionButtonStyle, chipStyle, eyebrowStyle, pageBackground, FONT_DISPLAY } from '../theme';
+import {
+  SURFACE,
+  FG,
+  MUTED,
+  BORDER,
+  ACCENT,
+  SOFT,
+  actionButtonStyle,
+  chipStyle,
+  eyebrowStyle,
+  pageBackground,
+  FONT_DISPLAY,
+  stickyHeaderStyle,
+  entryButtonStyle,
+  entryIconWrapStyle,
+  galleryLabelStyle,
+} from '../theme';
 
 // Ref-map key for the Uncategorized row (scroll-to-row target) — distinct
 // from any real Collection id, which are Firestore-generated document ids.
@@ -409,10 +426,10 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, color: FG }}>
       {!selected && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ padding: '10px 18px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {photoURL && (
               <img
                 src={photoURL}
@@ -424,95 +441,19 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               {displayName ? `${displayName}'s Memory Museum` : 'Your Memory Museum'}
             </p>
           </div>
-          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 29, lineHeight: 1.04, letterSpacing: '-.035em', margin: '5px 0 8px', color: FG, fontWeight: 650 }}>
+          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 29, lineHeight: 1.04, letterSpacing: '-.035em', margin: '5px 0 0', color: FG, fontWeight: 650 }}>
             Turn your life into a museum you can collect.
           </h1>
-          <p style={{ fontSize: 13, color: MUTED, margin: '7px 0 20px' }}>
+          <p style={{ fontSize: 13, color: MUTED, margin: '7px 0 0' }}>
             Keep travel, relationships, and daily life in objects.
           </p>
-
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-            <button
-              onClick={onAddItem}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                textAlign: 'left',
-                padding: '14px 14px',
-                borderRadius: 16,
-                border: 'none',
-                background: ACCENT,
-                color: '#fff',
-                cursor: 'pointer',
-              }}
-            >
-              <span
-                style={{
-                  width: 32,
-                  height: 32,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 15,
-                }}
-              >
-                📷
-              </span>
-              <span>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>Scan a Photo</span>
-                <span style={{ display: 'block', fontSize: 11, opacity: 0.85, marginTop: 1 }}>Capture a new item</span>
-              </span>
-            </button>
-            <button
-              onClick={() => setCreatingCollection(true)}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                textAlign: 'left',
-                padding: '14px 14px',
-                borderRadius: 16,
-                border: '1px solid ' + BORDER,
-                background: SURFACE,
-                color: FG,
-                cursor: 'pointer',
-              }}
-            >
-              <span
-                style={{
-                  width: 32,
-                  height: 32,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  background: SOFT,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 16,
-                  color: ACCENT,
-                }}
-              >
-                +
-              </span>
-              <span>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>New Memory</span>
-                <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 1 }}>Start a new collection</span>
-              </span>
-            </button>
-          </div>
-        </>
+        </div>
       )}
 
-      {items.length === 0 && <p style={{ color: MUTED }}>No saved 3D models yet.</p>}
+      {items.length === 0 && <p style={{ color: MUTED, padding: '16px 18px 0' }}>No saved 3D models yet.</p>}
 
       {!selected && recentItems.length > 0 && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, padding: '0 18px' }}>
           <h2 style={{ fontSize: 13, color: MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
             {recentItems.map((item) => (
@@ -558,10 +499,37 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
         </div>
       )}
 
+      {/* Sticky CTA + filter header (spec's .memory-sticky) — stays pinned
+          above the scrolling collection list below, matching the design
+          handoff's actual DOM structure rather than scrolling away with
+          the hero like the rest of this section used to. */}
       {!selected && items.length > 0 && (
-        <div style={{ marginTop: 20 }} ref={topRef}>
-          <h2 style={{ fontSize: 14, color: FG, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
+        <div style={stickyHeaderStyle}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
+            <button onClick={onAddItem} style={entryButtonStyle('scan')}>
+              <span style={entryIconWrapStyle('scan')}>
+                <Icon name="camera" size={20} />
+              </span>
+              <span>
+                <strong style={{ display: 'block', fontSize: 14 }}>Scan a Photo</strong>
+                <small style={{ display: 'block', marginTop: 3, fontSize: 10, lineHeight: 1.25, color: `color-mix(in oklch, ${SURFACE} 82%, transparent)` }}>
+                  Capture a new item
+                </small>
+              </span>
+            </button>
+            <button onClick={() => setCreatingCollection(true)} style={entryButtonStyle('create')}>
+              <span style={entryIconWrapStyle('create')}>
+                <Icon name="plus" size={20} />
+              </span>
+              <span>
+                <strong style={{ display: 'block', fontSize: 14 }}>New Memory</strong>
+                <small style={{ display: 'block', marginTop: 3, fontSize: 10, lineHeight: 1.25, color: MUTED }}>Start a new collection</small>
+              </span>
+            </button>
+          </div>
+
+          <p style={galleryLabelStyle}>Browse Memories</p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 9, overflowX: 'auto', paddingBottom: 3, alignItems: 'center' }}>
             <button onClick={() => scrollToRow('top')} style={chipStyle(true)}>
               All Items
             </button>
@@ -627,7 +595,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
       )}
 
       {selected ? (
-        <div>
+        <div style={{ padding: '16px 18px 40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
             <button
               onClick={() => selectItem(null)}
@@ -820,7 +788,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
         </div>
       ) : (
         items.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div ref={topRef} style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px 18px 40px' }}>
             {collections.map((c) => renderCollectionRow(c.id, c.name, itemsByCollection.get(c.id) ?? [], () => handleDeleteCollection(c)))}
             {uncategorizedItems.length > 0 && renderCollectionRow(UNCATEGORIZED, 'Uncategorized', uncategorizedItems)}
           </div>
