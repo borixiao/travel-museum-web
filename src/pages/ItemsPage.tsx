@@ -148,6 +148,35 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
         maxSpeed = Math.max(maxSpeed, Math.hypot(body.vx, body.vy));
       });
 
+      // Pairwise separation — without this, bodies that land near the same
+      // spot (e.g. everything settling at the bottom under straight-down
+      // gravity) just overlap indefinitely instead of spreading out, which
+      // from a glance looks identical to "nothing moved". O(n²) is fine at
+      // a personal item-library scale.
+      const bodies = Array.from(bodiesRef.current.values());
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          const b1 = bodies[i];
+          const b2 = bodies[j];
+          const dxPx = ((b2.x - b1.x) / 100) * rect.width;
+          const dyPx = ((b2.y - b1.y) / 100) * rect.height;
+          const dist = Math.hypot(dxPx, dyPx) || 0.001;
+          const minDist = ((b1.size + b2.size) / 2) * 0.82;
+          if (dist < minDist) {
+            const overlap = minDist - dist;
+            const nx = dxPx / dist;
+            const ny = dyPx / dist;
+            const pushXPercent = ((nx * overlap * 0.5) / rect.width) * 100;
+            const pushYPercent = ((ny * overlap * 0.5) / rect.height) * 100;
+            b1.x -= pushXPercent;
+            b1.y -= pushYPercent;
+            b2.x += pushXPercent;
+            b2.y += pushYPercent;
+            maxSpeed = Math.max(maxSpeed, overlap);
+          }
+        }
+      }
+
       forceTick((t) => t + 1);
 
       restFramesRef.current = maxSpeed < SLEEP_SPEED ? restFramesRef.current + 1 : 0;
@@ -179,19 +208,32 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
     for (const id of bodies.keys()) {
       if (!visibleIds.has(id)) bodies.delete(id);
     }
-    visibleItems.forEach((item) => {
+    // Grid+jitter starting positions, not pure hash-based — seededRandom on
+    // short/similar item ids (e.g. UUIDs sharing a prefix) can land close
+    // enough together that several items start on top of each other, which
+    // combined with gravity always pointing straight down (no horizontal
+    // spread at all) made everything pile into one spot at the bottom.
+    // Index-based cells guarantee real starting separation regardless of
+    // hash quality; seededRandom now only jitters *within* a cell.
+    const cols = Math.max(2, Math.ceil(Math.sqrt(visibleItems.length * 1.4)));
+    visibleItems.forEach((item, index) => {
       if (bodies.has(item.id)) return;
-      const rx = seededRandom(item.id + 'x');
-      const ry = seededRandom(item.id + 'y');
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const cellW = 100 / cols;
+      const cellRows = Math.max(1, Math.ceil(visibleItems.length / cols));
+      const cellH = 30 / cellRows;
+      const jx = (seededRandom(item.id + 'x') - 0.5) * cellW * 0.7;
+      const jy = (seededRandom(item.id + 'y') - 0.5) * cellH * 0.7;
       const rs = seededRandom(item.id + 's');
       const rr = seededRandom(item.id + 'r');
       bodies.set(item.id, {
         id: item.id,
-        x: FIELD_MARGIN_X + rx * (100 - FIELD_MARGIN_X * 2),
-        // Start in the upper half so there's somewhere for gravity to drop
-        // them from, matching the handoff's "物件已下落" (items have
+        x: clamp(cellW * (col + 0.5) + jx, FIELD_MARGIN_X, 100 - FIELD_MARGIN_X),
+        // Start in the upper portion so there's somewhere for gravity to
+        // drop them from, matching the handoff's "物件已下落" (items have
         // already fallen) framing rather than spawning already at rest.
-        y: 10 + ry * 30,
+        y: clamp(10 + cellH * row + jy, 6, 40),
         vx: 0,
         vy: 0,
         size: 64 + Math.round(rs * 18),
