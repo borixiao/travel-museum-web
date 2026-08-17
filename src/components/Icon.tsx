@@ -16,6 +16,7 @@ const PATHS: Record<string, string> = {
   check: '<path d="M5 12l4 4 10-10"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
 };
 
 export default function Icon({ name, size = 20 }: { name: keyof typeof PATHS; size?: number }) {

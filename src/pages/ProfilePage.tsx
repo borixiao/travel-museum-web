@@ -13,6 +13,7 @@ import { getCollections } from '../services/collections';
 import { getMoodboardsForUser } from '../services/moodboard';
 import type { UserProfile } from '../types';
 import { SURFACE, FG, MUTED, BORDER, ACCENT, SOFT, actionButtonStyle, dotsBackground, pageBackground, eyebrowStyle, FONT_DISPLAY } from '../theme';
+import Icon from '../components/Icon';
 
 /** "Jane Doe" -> "JD", falls back to the first letter of the email local-part
  *  ("jane@x.com" -> "J") for accounts with no display name at all. */
@@ -214,7 +215,7 @@ export default function ProfilePage({ user }: { user: User }) {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
-      <h1 style={{ textAlign: 'center', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Profile</h1>
+      <h1 style={{ textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: '0 0 20px' }}>Profile</h1>
       {profileError && <p style={{ color: 'crimson', fontSize: 13 }}>{profileError}</p>}
 
       {/* Account card — dotted background matches the collection-row/scan-
@@ -222,7 +223,8 @@ export default function ProfilePage({ user }: { user: User }) {
           it the same way a scanned photo does. */}
       <div
         style={{
-          borderRadius: 20,
+          minHeight: 216,
+          borderRadius: 28,
           padding: 20,
           ...dotsBackground(),
         }}
@@ -309,10 +311,11 @@ export default function ProfilePage({ user }: { user: User }) {
           alignItems: 'center',
           gap: 12,
           width: '100%',
+          minHeight: 74,
           textAlign: 'left',
           marginTop: 12,
           padding: 14,
-          borderRadius: 16,
+          borderRadius: 20,
           border: '1px solid ' + BORDER,
           background: SURFACE,
           cursor: publishedBoards.length === 1 ? 'pointer' : 'default',
@@ -328,10 +331,10 @@ export default function ProfilePage({ user }: { user: User }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 16,
+            color: FG,
           }}
         >
-          🔗
+          <Icon name="share" size={18} />
         </span>
         <span>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Shared Links</span>
@@ -358,10 +361,11 @@ export default function ProfilePage({ user }: { user: User }) {
           alignItems: 'center',
           gap: 12,
           width: '100%',
+          minHeight: 74,
           textAlign: 'left',
           marginTop: 12,
           padding: 14,
-          borderRadius: 16,
+          borderRadius: 20,
           border: '1px solid ' + BORDER,
           background: SURFACE,
           cursor: 'pointer',
@@ -377,10 +381,10 @@ export default function ProfilePage({ user }: { user: User }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 16,
+            color: FG,
           }}
         >
-          ⚙️
+          <Icon name="more" size={18} />
         </span>
         <span>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Settings</span>

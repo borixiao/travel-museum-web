@@ -9,7 +9,7 @@ import ModelViewer from '../components/ModelViewer';
 import ProgressBar from '../components/ProgressBar';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { PhotoSlot, ItemMetadata, Collection } from '../types';
-import { SURFACE, FG, MUTED, BORDER, ACCENT, dotsBackground, pageBackground, FONT_DISPLAY } from '../theme';
+import { SURFACE, FG, MUTED, BORDER, ACCENT, dotsBackground, pageBackground, FONT_DISPLAY, actionButtonStyle } from '../theme';
 
 const SLOTS: PhotoSlot[] = ['front', 'left', 'back', 'right'];
 
@@ -341,7 +341,7 @@ export default function UploadPage({ user, onExit }: { user: User; onExit?: () =
           ) : (
             <div style={{ width: 36, flexShrink: 0 }} />
           )}
-          <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0 }}>{copy.title}</h1>
+          <h1 style={{ flex: 1, textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: 0 }}>{copy.title}</h1>
           <div style={{ width: 36, flexShrink: 0 }} />
         </div>
 
@@ -356,7 +356,7 @@ export default function UploadPage({ user, onExit }: { user: User; onExit?: () =
             display: 'block',
             width: '100%',
             aspectRatio: '1',
-            borderRadius: 20,
+            borderRadius: 24,
             border: 'none',
             padding: 0,
             cursor: 'pointer',
@@ -396,24 +396,23 @@ export default function UploadPage({ user, onExit }: { user: User; onExit?: () =
           }}
         />
 
-        <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 650, margin: '24px 0 8px', lineHeight: 1.1 }}>{copy.heading}</h2>
-        <p style={{ fontSize: 14, color: MUTED, margin: '0 0 24px' }}>{copy.subtitle}</p>
+        <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, lineHeight: 1.08, letterSpacing: '-.035em', margin: '24px 0 8px' }}>{copy.heading}</h2>
+        <p style={{ fontSize: 15, color: MUTED, margin: '0 0 24px', maxWidth: '34ch' }}>{copy.subtitle}</p>
 
-        <button
-          onClick={() => {
-            if (preview) setWizardIndex((i) => i + 1);
-            else wizardCameraInputRef.current?.click();
-          }}
-          style={{ width: '100%', padding: '14px', borderRadius: 16, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
-        >
-          {preview ? 'Continue' : 'Take Photo'}
-        </button>
-        <button
-          onClick={() => wizardLibraryInputRef.current?.click()}
-          style={{ width: '100%', padding: '14px', borderRadius: 16, border: '1px solid ' + BORDER, background: SURFACE, color: FG, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 10 }}
-        >
-          Choose from Photo Library
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={() => {
+              if (preview) setWizardIndex((i) => i + 1);
+              else wizardCameraInputRef.current?.click();
+            }}
+            style={{ ...actionButtonStyle('primary'), width: '100%' }}
+          >
+            {preview ? 'Continue' : 'Take Photo'}
+          </button>
+          <button onClick={() => wizardLibraryInputRef.current?.click()} style={{ ...actionButtonStyle('secondary'), width: '100%' }}>
+            Choose from Photo Library
+          </button>
+        </div>
 
         {isRequired ? (
           <button

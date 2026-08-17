@@ -656,7 +656,7 @@ export default function HomePage({
             >
               ‹
             </button>
-            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0, marginRight: 36 }}>Item Details</h1>
+            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: 0, marginRight: 36 }}>Item Details</h1>
           </div>
 
           <ModelViewer
@@ -691,10 +691,8 @@ export default function HomePage({
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 13, color: MUTED }}>
-                  {[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}
-                </div>
-                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 650, margin: '4px 0 8px', color: FG }}>
+                <div style={eyebrowStyle}>{[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}</div>
+                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, lineHeight: 1.08, letterSpacing: '-.035em', margin: '5px 0 8px', color: FG }}>
                   {selected.name || 'Untitled item'}
                 </h2>
                 {selected.story && <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}

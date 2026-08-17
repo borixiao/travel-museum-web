@@ -69,7 +69,7 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '20px 18px 40px', color: FG }}>
-      <h1 style={{ textAlign: 'center', fontSize: 17, fontWeight: 700, margin: '0 0 16px' }}>Items</h1>
+      <h1 style={{ textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: '0 0 16px' }}>Items</h1>
 
       {items.length === 0 ? (
         <p style={{ color: MUTED, textAlign: 'center' }}>No saved items yet — scan one from Home to get started.</p>
