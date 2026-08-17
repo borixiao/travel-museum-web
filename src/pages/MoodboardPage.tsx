@@ -14,9 +14,24 @@ import {
 } from '../services/moodboard';
 import MoodboardCanvas from '../components/MoodboardCanvas';
 import MoodboardCardDetailModal from '../components/MoodboardCardDetailModal';
+import Icon from '../components/Icon';
 import type { Item, Moodboard, MoodboardCard } from '../types';
+import { SURFACE, FG, MUTED, BORDER, pageBackground, actionButtonStyle, FONT_DISPLAY } from '../theme';
 
-export default function MoodboardPage({ user }: { user: User }) {
+export default function MoodboardPage({
+  user,
+  collectionId,
+  collectionName,
+  onBack,
+}: {
+  user: User;
+  /** Which Collection's canvas to show — `null` is the Uncategorized
+   *  bucket's canvas. A canvas is a Collection's property now (see
+   *  services/moodboard.ts), not a single board shared across everything. */
+  collectionId: string | null;
+  collectionName: string;
+  onBack: () => void;
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -38,10 +53,12 @@ export default function MoodboardPage({ user }: { user: User }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([getItems(user.uid), getOrCreateMoodboard(user.uid)])
+    Promise.all([getItems(user.uid), getOrCreateMoodboard(user.uid, collectionId)])
       .then(([itemsData, board]) => {
         if (cancelled) return;
-        setItems(itemsData);
+        // Only this collection's own items make sense to add to its canvas
+        // — matches how Home's collection rows already scope items.
+        setItems(itemsData.filter((it) => (it.collectionId ?? null) === collectionId));
         setMoodboard(board);
         setCards(board.cards);
         cardsRef.current = board.cards;
@@ -56,7 +73,7 @@ export default function MoodboardPage({ user }: { user: User }) {
     return () => {
       cancelled = true;
     };
-  }, [user.uid]);
+  }, [user.uid, collectionId]);
 
   // Central place to change `cards`: updates local state + the ref together,
   // and (unless save:false) persists the whole array to Firestore. Dragging
@@ -257,47 +274,78 @@ export default function MoodboardPage({ user }: { user: User }) {
       .catch(() => setCopyMessage(url));
   }
 
-  if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Loading moodboard…</p>;
+  if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Loading canvas…</p>;
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
   if (!moodboard) return null;
 
   return (
-    <div style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
+    <div style={{ maxWidth: 720, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 18px 40px', color: FG }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            border: 'none',
+            background: SURFACE,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Icon name="back" size={18} />
+        </button>
+        <h1 style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600, margin: 0, marginRight: 36, color: MUTED, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+          {collectionName}'s Canvas
+        </h1>
+      </div>
+
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={handleTitleBlur}
         style={{
-          fontSize: 20,
-          fontWeight: 600,
+          fontFamily: FONT_DISPLAY,
+          fontSize: 26,
+          fontWeight: 650,
           border: 'none',
-          borderBottom: '1px solid #444',
           background: 'transparent',
-          color: 'inherit',
+          color: FG,
           width: '100%',
           padding: '4px 0',
         }}
       />
-      <p style={{ color: '#888', fontSize: 12, marginTop: 6 }}>
+      <p style={{ color: MUTED, fontSize: 13, marginTop: 2 }}>
         Curate items into a shareable exhibition board — drag cards to arrange them, then publish a link visitors can view without logging in.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0' }}>
-        <button onClick={addTextCard}>+ Add text</button>
-        <button onClick={handleTogglePublish} disabled={publishing}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '14px 0' }}>
+        <button onClick={addTextCard} style={actionButtonStyle('secondary')}>
+          + Add text
+        </button>
+        <button onClick={handleTogglePublish} disabled={publishing} style={actionButtonStyle('primary', publishing)}>
           {publishing ? 'Saving…' : moodboard.published ? 'Unpublish' : 'Publish'}
         </button>
-        {moodboard.published && <button onClick={handleCopyLink}>Copy public link</button>}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#888' }}>
+        {moodboard.published && (
+          <button onClick={handleCopyLink} style={actionButtonStyle('secondary')}>
+            Copy public link
+          </button>
+        )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED }}>
           Background
           <input
             type="color"
             value={moodboard.backgroundColor ?? DEFAULT_MOODBOARD_BACKGROUND}
             onChange={(e) => handleBackgroundColorChange(e.target.value)}
-            style={{ width: 28, height: 28, padding: 0, border: '1px solid #444', borderRadius: 4, background: 'none', cursor: 'pointer' }}
+            style={{ width: 28, height: 28, padding: 0, border: '1px solid ' + BORDER, borderRadius: 6, background: 'none', cursor: 'pointer' }}
           />
         </label>
-        <label style={{ fontSize: 12, color: '#888', cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
+        <label style={{ fontSize: 12, color: MUTED, textDecoration: 'underline', cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
           {savingBackgroundImage ? 'Saving…' : moodboard.backgroundImageUrl ? 'Change image' : 'Upload background image'}
           <input
             type="file"
@@ -311,13 +359,17 @@ export default function MoodboardPage({ user }: { user: User }) {
           />
         </label>
         {moodboard.backgroundImageUrl && (
-          <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
+          <button
+            onClick={handleRemoveBackgroundImage}
+            disabled={savingBackgroundImage}
+            style={{ fontSize: 12, color: MUTED, textDecoration: 'underline', background: 'none', border: 'none', cursor: savingBackgroundImage ? 'default' : 'pointer', padding: 0 }}
+          >
             Remove image
           </button>
         )}
       </div>
       {backgroundImageError && <p style={{ fontSize: 12, color: 'crimson' }}>{backgroundImageError}</p>}
-      {copyMessage && <p style={{ fontSize: 12, color: '#6ea8ff', wordBreak: 'break-all' }}>{copyMessage}</p>}
+      {copyMessage && <p style={{ fontSize: 12, color: FG, wordBreak: 'break-all' }}>{copyMessage}</p>}
 
       <MoodboardCanvas
         cards={cards}
@@ -336,9 +388,9 @@ export default function MoodboardPage({ user }: { user: User }) {
       />
       {expandedCard && <MoodboardCardDetailModal card={expandedCard} onClose={() => setExpandedCard(null)} />}
 
-      <h2 style={{ fontSize: 14, marginTop: 20 }}>Your items — tap to add to the board</h2>
+      <h2 style={{ fontSize: 14, marginTop: 20, color: FG }}>Items in this memory — tap to add to the canvas</h2>
       {items.length === 0 ? (
-        <p style={{ color: '#888', fontSize: 12 }}>No saved items yet — add some from the "Add Item" tab first.</p>
+        <p style={{ color: MUTED, fontSize: 12 }}>No items in this memory yet — scan one from Home first.</p>
       ) : (
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }}>
           {items.map((item) => (
@@ -348,12 +400,12 @@ export default function MoodboardPage({ user }: { user: User }) {
               style={{
                 flexShrink: 0,
                 width: 84,
-                border: '1px solid #444',
-                borderRadius: 6,
+                border: '1px solid ' + BORDER,
+                borderRadius: 10,
                 padding: 0,
                 overflow: 'hidden',
                 cursor: 'pointer',
-                background: 'none',
+                background: SURFACE,
                 textAlign: 'left',
               }}
             >
@@ -364,9 +416,9 @@ export default function MoodboardPage({ user }: { user: User }) {
                   style={{ width: '100%', height: 64, objectFit: 'cover', display: 'block' }}
                 />
               ) : (
-                <div style={{ width: '100%', height: 64, background: '#333' }} />
+                <div style={{ width: '100%', height: 64, background: BORDER }} />
               )}
-              <div style={{ fontSize: 10, color: '#ddd', padding: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 10, color: FG, padding: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {item.name || 'Untitled'}
               </div>
             </button>

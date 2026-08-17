@@ -26,12 +26,17 @@ export function nextMoodboardCardPosition(existingCardCount: number): { x: numbe
 }
 
 /**
- * Every user gets exactly one moodboard, created lazily the first time they
- * open the Moodboard tab, rather than a list of boards to manage — keeps the
- * "arrange cards, publish one shareable link" flow simple for this pass.
+ * Each Collection (Memory) gets its own canvas, created lazily the first
+ * time it's opened — `collectionId: null` is the Uncategorized bucket's
+ * canvas. Replaces the single per-user board this app started with.
  */
-export async function getOrCreateMoodboard(userId: string): Promise<Moodboard> {
-  const q = query(collection(db, 'moodboards'), where('userId', '==', userId), limit(1));
+export async function getOrCreateMoodboard(userId: string, collectionId: string | null): Promise<Moodboard> {
+  const q = query(
+    collection(db, 'moodboards'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId),
+    limit(1),
+  );
   const snapshot = await getDocs(q);
   if (!snapshot.empty) {
     const d = snapshot.docs[0];
@@ -40,6 +45,7 @@ export async function getOrCreateMoodboard(userId: string): Promise<Moodboard> {
 
   const createdRef = await addDoc(collection(db, 'moodboards'), {
     userId,
+    collectionId,
     title: 'My Exhibition',
     published: false,
     cards: [],
@@ -51,6 +57,18 @@ export async function getOrCreateMoodboard(userId: string): Promise<Moodboard> {
   return { id: createdRef.id, ...created.data() } as Moodboard;
 }
 
+/**
+ * All of a user's canvases across their collections — used by Profile's
+ * Shared Links row to summarize how many are published, and by Home's
+ * per-collection "Open Canvas" action to show a card count without opening
+ * each board individually.
+ */
+export async function getMoodboardsForUser(userId: string): Promise<Moodboard[]> {
+  const q = query(collection(db, 'moodboards'), where('userId', '==', userId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Moodboard));
+}
+
 export async function saveMoodboardCards(moodboardId: string, cards: MoodboardCard[]): Promise<void> {
   await updateDoc(doc(db, 'moodboards', moodboardId), { cards, updatedAt: serverTimestamp() });
 }
@@ -60,10 +78,13 @@ export async function saveMoodboardCards(moodboardId: string, cards: MoodboardCa
  * HomePage.tsx) so it can share the exact same card-snapshot shape and grid
  * placement as MoodboardPage's own "tap thumbnail to add" strip, without
  * either entry point needing to know about the other's local component
- * state — this just reads/writes the moodboard doc directly.
+ * state — this just reads/writes the moodboard doc directly. Adds to the
+ * canvas belonging to the item's own Collection (or Uncategorized's canvas
+ * if it has none) — a canvas is a Collection's property now, not a single
+ * board shared across everything the user owns.
  */
 export async function addItemToMoodboard(userId: string, item: Item): Promise<Moodboard> {
-  const board = await getOrCreateMoodboard(userId);
+  const board = await getOrCreateMoodboard(userId, item.collectionId ?? null);
   const { x, y } = nextMoodboardCardPosition(board.cards.length);
   const newCard: MoodboardCard = {
     id: crypto.randomUUID(),
@@ -102,12 +123,13 @@ export async function setMoodboardBackgroundColor(moodboardId: string, backgroun
   await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundColor, updatedAt: serverTimestamp() });
 }
 
-// Stored at `moodboards/{userId}/background` (not keyed by moodboardId)
-// since there's only ever one moodboard per user — mirrors the
-// `users/{uid}/avatar` Storage path pattern so the same "first segment is
-// the owner's uid" Storage rule shape covers this too.
+// Stored at `moodboards/{userId}/{moodboardId}/background` — now that a user
+// can have several canvases (one per collection), the path has to include
+// moodboardId too, or every canvas's background upload would overwrite the
+// same file. Still falls under the existing owner-only
+// `moodboards/{userId}/{allPaths=**}` Storage rule, so no rule change needed.
 export async function setMoodboardBackgroundImage(userId: string, moodboardId: string, file: File): Promise<string> {
-  const imageRef = ref(storage, `moodboards/${userId}/background`);
+  const imageRef = ref(storage, `moodboards/${userId}/${moodboardId}/background`);
   await uploadBytes(imageRef, file);
   const backgroundImageUrl = await getDownloadURL(imageRef);
   await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundImageUrl, updatedAt: serverTimestamp() });
@@ -115,7 +137,7 @@ export async function setMoodboardBackgroundImage(userId: string, moodboardId: s
 }
 
 export async function clearMoodboardBackgroundImage(userId: string, moodboardId: string): Promise<void> {
-  await deleteObject(ref(storage, `moodboards/${userId}/background`)).catch(() => {
+  await deleteObject(ref(storage, `moodboards/${userId}/${moodboardId}/background`)).catch(() => {
     // Best-effort — nothing to clean up if it was never uploaded.
   });
   await updateDoc(doc(db, 'moodboards', moodboardId), { backgroundImageUrl: deleteField(), updatedAt: serverTimestamp() });

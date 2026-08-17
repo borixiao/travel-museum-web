@@ -52,7 +52,24 @@ function metadataOf(item: Item): ItemMetadata {
   };
 }
 
-export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: () => void }) {
+export default function HomePage({
+  user,
+  onAddItem,
+  onOpenCanvas,
+  pendingItemId,
+  onConsumePendingItem,
+}: {
+  user: User;
+  onAddItem?: () => void;
+  /** Opens the per-collection canvas (see App.tsx's activeCanvas state) —
+   *  `null` collectionId is the Uncategorized bucket's canvas. */
+  onOpenCanvas?: (collectionId: string | null, collectionName: string) => void;
+  /** Set by App.tsx when the Items tab hands off a tap-through selection —
+   *  consumed once items load, then cleared via onConsumePendingItem so it
+   *  doesn't re-fire on every render. */
+  pendingItemId?: string | null;
+  onConsumePendingItem?: () => void;
+}) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +159,18 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
       cancelled = true;
     };
   }, [user]);
+
+  // Cross-tab hand-off from the Items tab (see App.tsx's pendingItemId) —
+  // once this tab's own items have loaded, find the requested one and open
+  // its detail view, then tell App.tsx to clear the pending id so this
+  // doesn't re-fire on every subsequent render.
+  useEffect(() => {
+    if (!pendingItemId || items.length === 0) return;
+    const found = items.find((it) => it.id === pendingItemId);
+    if (found) selectItem(found);
+    onConsumePendingItem?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingItemId, items]);
 
   // PRD 4.2 "Recent items rail (latest 4, horizontal scroll)" — always shows
   // the true most-recently-added 4, sourced straight from `items`, which
@@ -377,15 +406,25 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               {rowItems.length} item{rowItems.length === 1 ? '' : 's'}
             </div>
           </div>
-          {onDelete && (
-            <button
-              onClick={onDelete}
-              title="Delete collection"
-              style={{ flexShrink: 0, background: 'none', border: 'none', color: '#e05555', cursor: 'pointer', fontSize: 13, padding: 4 }}
-            >
-              ✕
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {onOpenCanvas && (
+              <button
+                onClick={() => onOpenCanvas(key === UNCATEGORIZED ? null : key, name)}
+                style={{ background: 'none', border: 'none', color: MUTED, textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}
+              >
+                Open Canvas
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                title="Delete collection"
+                style={{ background: 'none', border: 'none', color: '#e05555', cursor: 'pointer', fontSize: 13, padding: 4 }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
         {rowItems.length > 0 ? (
           <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', paddingBottom: 2 }}>
@@ -617,7 +656,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
             >
               ‹
             </button>
-            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0, marginRight: 36 }}>Item Details</h1>
+            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: 0, marginRight: 36 }}>Item Details</h1>
           </div>
 
           <ModelViewer
@@ -652,10 +691,8 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 13, color: MUTED }}>
-                  {[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}
-                </div>
-                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 650, margin: '4px 0 8px', color: FG }}>
+                <div style={eyebrowStyle}>{[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}</div>
+                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, lineHeight: 1.08, letterSpacing: '-.035em', margin: '5px 0 8px', color: FG }}>
                   {selected.name || 'Untitled item'}
                 </h2>
                 {selected.story && <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}
@@ -727,7 +764,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     disabled={addingToMoodboard || deleting}
                     style={actionButtonStyle('secondary', addingToMoodboard || deleting)}
                   >
-                    {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Moodboard'}
+                    {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Canvas'}
                   </button>
                   <button onClick={handleDelete} disabled={deleting} style={actionButtonStyle('danger', deleting)}>
                     {deleting ? 'Deleting…' : 'Delete'}

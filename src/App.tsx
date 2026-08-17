@@ -5,38 +5,80 @@ import { auth } from './firebase';
 import LoginPage from './pages/LoginPage';
 import UploadPage from './pages/UploadPage';
 import HomePage from './pages/HomePage';
+import ItemsPage from './pages/ItemsPage';
 import ProfilePage from './pages/ProfilePage';
 import MoodboardPage from './pages/MoodboardPage';
 import MoodboardViewPage from './pages/MoodboardViewPage';
 import BottomTabBar, { type TabDef } from './components/BottomTabBar';
+import type { Item } from './types';
 
-// Mirrors the PRD's screen list (HomeScreen/CollectionScreen, AddItemScreen,
-// MoodboardScreen, ProfileScreen) as top-level tabs.
-type Tab = 'home' | 'upload' | 'moodboard' | 'profile';
+// Matches the design handoff's actual bottom nav: three regular tabs
+// (记忆/物件/我的) plus a separate 拍照 scan FAB — Add Item and the canvas
+// are no longer tabs of their own, they're reached from Home/Items (scan)
+// and from a Collection row's "Open Canvas" action (canvas).
+type Tab = 'home' | 'items' | 'profile';
 
 const TABS: TabDef[] = [
-  { key: 'home', label: 'Collection', icon: '🏛️' },
-  { key: 'upload', label: 'Add Item', icon: '➕' },
-  { key: 'moodboard', label: 'Moodboard', icon: '🎨' },
-  { key: 'profile', label: 'Profile', icon: '👤' },
+  { key: 'home', label: 'Memories', icon: 'home' },
+  { key: 'items', label: 'Items', icon: 'box' },
+  { key: 'profile', label: 'Me', icon: 'person' },
 ];
 
 // The logged-in tab shell — everything that requires an authenticated user.
 function AuthenticatedApp({ user }: { user: User }) {
   const [tab, setTab] = useState<Tab>('home');
+  // Scan and the per-collection canvas are full-screen overlays on top of
+  // the tab shell rather than tabs themselves — both have their own back
+  // navigation instead of living in the persistent bottom nav.
+  const [scanning, setScanning] = useState(false);
+  const [activeCanvas, setActiveCanvas] = useState<{ collectionId: string | null; collectionName: string } | null>(null);
+  // Cross-tab hand-off: tapping an item in Items should open it in Home's
+  // (the only screen with a full item detail view) detail view — see
+  // HomePage's pendingItemId/onConsumePendingItem.
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+
+  if (scanning) {
+    return <UploadPage user={user} onExit={() => setScanning(false)} />;
+  }
+
+  if (activeCanvas) {
+    return (
+      <MoodboardPage
+        user={user}
+        collectionId={activeCanvas.collectionId}
+        collectionName={activeCanvas.collectionName}
+        onBack={() => setActiveCanvas(null)}
+      />
+    );
+  }
 
   return (
     <div>
       {/* Bottom-fixed tab bar means content needs bottom padding so the last
           bit of scrollable content isn't hidden behind it. */}
-      <div style={{ paddingBottom: 64 }}>
-        {tab === 'home' && <HomePage user={user} onAddItem={() => setTab('upload')} />}
-        {tab === 'upload' && <UploadPage user={user} />}
-        {tab === 'moodboard' && <MoodboardPage user={user} />}
+      <div style={{ paddingBottom: 96 }}>
+        {tab === 'home' && (
+          <HomePage
+            user={user}
+            onAddItem={() => setScanning(true)}
+            onOpenCanvas={(collectionId, collectionName) => setActiveCanvas({ collectionId, collectionName })}
+            pendingItemId={pendingItemId}
+            onConsumePendingItem={() => setPendingItemId(null)}
+          />
+        )}
+        {tab === 'items' && (
+          <ItemsPage
+            user={user}
+            onSelectItem={(item: Item) => {
+              setPendingItemId(item.id);
+              setTab('home');
+            }}
+          />
+        )}
         {tab === 'profile' && <ProfilePage user={user} />}
       </div>
 
-      <BottomTabBar tabs={TABS} active={tab} onChange={setTab} />
+      <BottomTabBar tabs={TABS} active={tab} onChange={setTab} onScan={() => setScanning(true)} />
     </div>
   );
 }

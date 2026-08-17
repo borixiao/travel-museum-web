@@ -10,9 +10,10 @@ import { auth } from '../firebase';
 import { getOrCreateUserProfile, updateUserAvatar, updateUserDisplayName } from '../services/users';
 import { getItems } from '../services/items';
 import { getCollections } from '../services/collections';
-import { getOrCreateMoodboard } from '../services/moodboard';
+import { getMoodboardsForUser } from '../services/moodboard';
 import type { UserProfile } from '../types';
 import { SURFACE, FG, MUTED, BORDER, ACCENT, SOFT, actionButtonStyle, dotsBackground, pageBackground, eyebrowStyle, FONT_DISPLAY } from '../theme';
+import Icon from '../components/Icon';
 
 /** "Jane Doe" -> "JD", falls back to the first letter of the email local-part
  *  ("jane@x.com" -> "J") for accounts with no display name at all. */
@@ -48,10 +49,11 @@ export default function ProfilePage({ user }: { user: User }) {
 
   const [itemCount, setItemCount] = useState<number | null>(null);
   const [collectionCount, setCollectionCount] = useState<number | null>(null);
-  // Only `id`/`published` are needed here (for the Shared Links row's
-  // copy-link action) — the full board (cards, background, etc.) belongs to
-  // MoodboardPage, not this summary.
-  const [moodboard, setMoodboard] = useState<{ id: string; published: boolean } | null>(null);
+  // Every Collection now has its own canvas (see services/moodboard.ts), so
+  // there can be several published links, not just one — only `id`/
+  // `published` are needed here for the Shared Links summary/copy action;
+  // the full boards (cards, background, etc.) belong to MoodboardPage.
+  const [publishedBoards, setPublishedBoards] = useState<{ id: string; published: boolean }[]>([]);
   const [linkCopied, setLinkCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -98,12 +100,12 @@ export default function ProfilePage({ user }: { user: User }) {
       .catch(() => {
         if (!cancelled) setCollectionCount(null);
       });
-    getOrCreateMoodboard(user.uid)
-      .then((board) => {
-        if (!cancelled) setMoodboard({ id: board.id, published: board.published });
+    getMoodboardsForUser(user.uid)
+      .then((boards) => {
+        if (!cancelled) setPublishedBoards(boards.filter((b) => b.published));
       })
       .catch(() => {
-        if (!cancelled) setMoodboard(null);
+        if (!cancelled) setPublishedBoards([]);
       });
     return () => {
       cancelled = true;
@@ -190,9 +192,13 @@ export default function ProfilePage({ user }: { user: User }) {
     }
   }
 
+  // Copying only makes sense for a single unambiguous link — with several
+  // collections each possibly published, tapping this row otherwise just
+  // shows the count (managing/copying each link individually happens from
+  // that collection's own canvas via Home's "Open Canvas").
   async function handleCopyMoodboardLink() {
-    if (!moodboard?.published) return;
-    const url = `${window.location.origin}/m/${moodboard.id}`;
+    if (publishedBoards.length !== 1) return;
+    const url = `${window.location.origin}/m/${publishedBoards[0].id}`;
     try {
       await navigator.clipboard.writeText(url);
       setLinkCopied(true);
@@ -200,7 +206,7 @@ export default function ProfilePage({ user }: { user: User }) {
     } catch {
       // Clipboard API can fail (permissions, insecure context) — not worth
       // its own error state for a "nice to have" copy shortcut; the user can
-      // still get the link from the Moodboard tab's own Publish controls.
+      // still get the link from that collection's own canvas.
     }
   }
 
@@ -209,7 +215,7 @@ export default function ProfilePage({ user }: { user: User }) {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
-      <h1 style={{ textAlign: 'center', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Profile</h1>
+      <h1 style={{ textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: '0 0 20px' }}>Profile</h1>
       {profileError && <p style={{ color: 'crimson', fontSize: 13 }}>{profileError}</p>}
 
       {/* Account card — dotted background matches the collection-row/scan-
@@ -217,7 +223,8 @@ export default function ProfilePage({ user }: { user: User }) {
           it the same way a scanned photo does. */}
       <div
         style={{
-          borderRadius: 20,
+          minHeight: 216,
+          borderRadius: 28,
           padding: 20,
           ...dotsBackground(),
         }}
@@ -292,8 +299,10 @@ export default function ProfilePage({ user }: { user: User }) {
         {avatarError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{avatarError}</p>}
       </div>
 
-      {/* Shared Links row — tapping copies the public Moodboard link when
-          one's been published; inert otherwise (nothing to copy yet). */}
+      {/* Shared Links row — each Collection has its own canvas, so there can
+          be several published links. Copying inline only makes sense when
+          there's exactly one; otherwise this is just a count, and each link
+          is managed from its own collection's canvas (Home > Open Canvas). */}
       <button
         type="button"
         onClick={handleCopyMoodboardLink}
@@ -302,13 +311,14 @@ export default function ProfilePage({ user }: { user: User }) {
           alignItems: 'center',
           gap: 12,
           width: '100%',
+          minHeight: 74,
           textAlign: 'left',
           marginTop: 12,
           padding: 14,
-          borderRadius: 16,
+          borderRadius: 20,
           border: '1px solid ' + BORDER,
           background: SURFACE,
-          cursor: moodboard?.published ? 'pointer' : 'default',
+          cursor: publishedBoards.length === 1 ? 'pointer' : 'default',
         }}
       >
         <span
@@ -321,15 +331,21 @@ export default function ProfilePage({ user }: { user: User }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 16,
+            color: FG,
           }}
         >
-          🔗
+          <Icon name="share" size={18} />
         </span>
         <span>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Shared Links</span>
           <span style={{ display: 'block', fontSize: 12, color: MUTED, marginTop: 1 }}>
-            {linkCopied ? 'Link copied!' : moodboard?.published ? 'Tap to copy your Moodboard link' : 'No shared links yet'}
+            {linkCopied
+              ? 'Link copied!'
+              : publishedBoards.length === 0
+                ? 'No shared links yet'
+                : publishedBoards.length === 1
+                  ? 'Tap to copy your canvas link'
+                  : `${publishedBoards.length} canvases shared`}
           </span>
         </span>
       </button>
@@ -345,10 +361,11 @@ export default function ProfilePage({ user }: { user: User }) {
           alignItems: 'center',
           gap: 12,
           width: '100%',
+          minHeight: 74,
           textAlign: 'left',
           marginTop: 12,
           padding: 14,
-          borderRadius: 16,
+          borderRadius: 20,
           border: '1px solid ' + BORDER,
           background: SURFACE,
           cursor: 'pointer',
@@ -364,10 +381,10 @@ export default function ProfilePage({ user }: { user: User }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 16,
+            color: FG,
           }}
         >
-          ⚙️
+          <Icon name="more" size={18} />
         </span>
         <span>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Settings</span>
