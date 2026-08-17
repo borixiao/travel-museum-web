@@ -36,6 +36,10 @@ function AuthenticatedApp({ user }: { user: User }) {
   // (the only screen with a full item detail view) detail view — see
   // HomePage's pendingItemId/onConsumePendingItem.
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  // The design handoff's item-detail screen replaces the whole screen (tab
+  // bar included) with its own fixed action footer — mirrored here by
+  // hiding BottomTabBar instead of stacking two fixed-bottom bars.
+  const [itemDetailOpen, setItemDetailOpen] = useState(false);
 
   if (scanning) {
     return <UploadPage user={user} onExit={() => setScanning(false)} />;
@@ -55,8 +59,9 @@ function AuthenticatedApp({ user }: { user: User }) {
   return (
     <div>
       {/* Bottom-fixed tab bar means content needs bottom padding so the last
-          bit of scrollable content isn't hidden behind it. */}
-      <div style={{ paddingBottom: 96 }}>
+          bit of scrollable content isn't hidden behind it — not needed while
+          an item detail's own fixed action footer has taken its place. */}
+      <div style={{ paddingBottom: itemDetailOpen ? 0 : 96 }}>
         {tab === 'home' && (
           <HomePage
             user={user}
@@ -64,6 +69,7 @@ function AuthenticatedApp({ user }: { user: User }) {
             onOpenCanvas={(collectionId, collectionName) => setActiveCanvas({ collectionId, collectionName })}
             pendingItemId={pendingItemId}
             onConsumePendingItem={() => setPendingItemId(null)}
+            onDetailOpenChange={setItemDetailOpen}
           />
         )}
         {tab === 'items' && (
@@ -78,7 +84,7 @@ function AuthenticatedApp({ user }: { user: User }) {
         {tab === 'profile' && <ProfilePage user={user} />}
       </div>
 
-      <BottomTabBar tabs={TABS} active={tab} onChange={setTab} onScan={() => setScanning(true)} />
+      {!itemDetailOpen && <BottomTabBar tabs={TABS} active={tab} onChange={setTab} onScan={() => setScanning(true)} />}
     </div>
   );
 }

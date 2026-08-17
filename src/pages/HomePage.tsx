@@ -19,6 +19,7 @@ import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataF
 import Icon from '../components/Icon';
 import type { Item, ItemMetadata, Collection } from '../types';
 import {
+  BG,
   SURFACE,
   FG,
   MUTED,
@@ -58,6 +59,7 @@ export default function HomePage({
   onOpenCanvas,
   pendingItemId,
   onConsumePendingItem,
+  onDetailOpenChange,
 }: {
   user: User;
   onAddItem?: () => void;
@@ -69,6 +71,11 @@ export default function HomePage({
    *  doesn't re-fire on every render. */
   pendingItemId?: string | null;
   onConsumePendingItem?: () => void;
+  /** The design handoff's item-detail screen replaces the whole screen —
+   *  bottom tab bar included — with a fixed 2-button action footer, rather
+   *  than showing both at once. Lets App.tsx hide BottomTabBar while a
+   *  detail view is open instead of the two fixed bars overlapping. */
+  onDetailOpenChange?: (open: boolean) => void;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,6 +214,7 @@ export default function HomePage({
     setMoodboardError(null);
     setAddedToMoodboard(false);
     setBackgroundImageError(null);
+    onDetailOpenChange?.(item !== null);
   }
 
   async function handleGenerateSticker() {
@@ -634,7 +642,7 @@ export default function HomePage({
       )}
 
       {selected ? (
-        <div style={{ padding: '16px 18px 40px' }}>
+        <div style={{ padding: '16px 18px 100px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
             <button
               onClick={() => selectItem(null)}
@@ -656,7 +664,29 @@ export default function HomePage({
             >
               ‹
             </button>
-            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: 0, marginRight: 36 }}>Item Details</h1>
+            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: 0 }}>Item Details</h1>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              aria-label="Delete item"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: SURFACE,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                cursor: deleting ? 'default' : 'pointer',
+                opacity: deleting ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: '#e05555',
+              }}
+            >
+              <Icon name="trash" size={16} />
+            </button>
           </div>
 
           <ModelViewer
@@ -680,14 +710,6 @@ export default function HomePage({
                 <h2 style={{ fontSize: 16, marginBottom: 8, color: FG }}>Edit item details</h2>
                 <ItemMetadataForm value={editValue} onChange={setEditValue} />
                 {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={handleSaveEdit} disabled={savingEdit} style={actionButtonStyle('primary', savingEdit)}>
-                    {savingEdit ? 'Saving…' : 'Save changes'}
-                  </button>
-                  <button onClick={() => setEditing(false)} disabled={savingEdit} style={actionButtonStyle('secondary', savingEdit)}>
-                    Cancel
-                  </button>
-                </div>
               </div>
             ) : (
               <>
@@ -746,37 +768,31 @@ export default function HomePage({
                 </div>
                 {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: -12, marginBottom: 12 }}>{collectionsError}</p>}
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <button onClick={startEdit} disabled={deleting} style={actionButtonStyle('secondary', deleting)}>
-                    Edit
-                  </button>
-                  {selected.photos?.[0] && (
-                    <button
-                      onClick={handleGenerateSticker}
-                      disabled={generatingSticker || deleting}
-                      style={actionButtonStyle('secondary', generatingSticker || deleting)}
-                    >
-                      {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
-                    </button>
-                  )}
-                  <button
-                    onClick={handleAddToMoodboard}
-                    disabled={addingToMoodboard || deleting}
-                    style={actionButtonStyle('secondary', addingToMoodboard || deleting)}
-                  >
-                    {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Canvas'}
-                  </button>
-                  <button onClick={handleDelete} disabled={deleting} style={actionButtonStyle('danger', deleting)}>
-                    {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
                 {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{deleteError}</p>}
                 {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{stickerError}</p>}
                 {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{moodboardError}</p>}
               </>
             )}
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, fontSize: 12 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, fontSize: 12, flexWrap: 'wrap' }}>
+              {!editing && selected.photos?.[0] && (
+                <button
+                  onClick={handleGenerateSticker}
+                  disabled={generatingSticker || deleting}
+                  style={{
+                    fontSize: 12,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: MUTED,
+                    textDecoration: 'underline',
+                    cursor: generatingSticker || deleting ? 'default' : 'pointer',
+                    opacity: generatingSticker || deleting ? 0.5 : 1,
+                  }}
+                >
+                  {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
+                </button>
+              )}
               <label
                 style={{
                   cursor: savingBackgroundImage ? 'default' : 'pointer',
@@ -821,6 +837,65 @@ export default function HomePage({
               )}
             </div>
             {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{backgroundImageError}</p>}
+          </div>
+
+          {/* Fixed bottom action bar (spec's .item-detail-action-bar) —
+              replaces the bottom tab bar (hidden via onDetailOpenChange)
+              while a detail view is open, matching the handoff's real
+              item-detail screen having no tab bar of its own. Edit mode
+              swaps in Cancel/Save changes, same as the handoff's own
+              item-detail-edit-actions variant of this footer. */}
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'grid',
+              gridTemplateColumns: '.82fr 1.18fr',
+              gap: 10,
+              padding: '12px 18px calc(14px + env(safe-area-inset-bottom))',
+              borderTop: '1px solid ' + BORDER,
+              background: `color-mix(in oklch, ${BG} 84%, transparent)`,
+              backdropFilter: 'blur(24px) saturate(1.15)',
+              boxShadow: '0 -10px 30px rgba(0,0,0,0.07)',
+            }}
+          >
+            {editing ? (
+              <>
+                <button
+                  onClick={() => setEditing(false)}
+                  disabled={savingEdit}
+                  style={{ ...actionButtonStyle('secondary', savingEdit), minHeight: 54, borderRadius: 999 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  style={{ ...actionButtonStyle('primary', savingEdit), minHeight: 54, borderRadius: 999 }}
+                >
+                  {savingEdit ? 'Saving…' : 'Save changes'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={startEdit}
+                  disabled={deleting}
+                  style={{ ...actionButtonStyle('secondary', deleting), minHeight: 54, borderRadius: 999 }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleAddToMoodboard}
+                  disabled={addingToMoodboard || deleting}
+                  style={{ ...actionButtonStyle('primary', addingToMoodboard || deleting), minHeight: 54, borderRadius: 999 }}
+                >
+                  {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Canvas'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       ) : (
