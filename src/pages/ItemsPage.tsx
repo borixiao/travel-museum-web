@@ -69,6 +69,11 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef(0);
   const restFramesRef = useRef(0);
+  // On-screen diagnostic (temporary) — surfaces exactly what the physics
+  // loop sees each frame, so a "gravity does nothing" report can be
+  // screenshotted directly instead of reasoned about blind. Remove once
+  // the real-device behavior is confirmed fixed.
+  const debugRef = useRef({ rect: '—', status: 'idle', frame: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +118,18 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
       lastTimeRef.current = timestamp;
 
       const rect = field.getBoundingClientRect();
+      debugRef.current.rect = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+      // Mobile Safari can report a zero-size rect for a frame or two while
+      // 100vh-based flex layout settles (a known viewport-unit quirk) — a
+      // zero width/height here would divide-by-zero into Infinity and
+      // permanently corrupt every body's position. Skip the physics step
+      // (but keep polling) until the field actually has real dimensions.
+      if (rect.width < 10 || rect.height < 10) {
+        debugRef.current.status = 'waiting for layout';
+        forceTick((t) => t + 1);
+        rafRef.current = requestAnimationFrame(runFrame);
+        return;
+      }
       const { x: gx, y: gy } = gravityVecRef.current;
       let maxSpeed = 0;
 
@@ -177,10 +194,13 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
         }
       }
 
+      debugRef.current.frame += 1;
+      debugRef.current.status = `running · gx=${gx.toFixed(2)} gy=${gy.toFixed(2)} speed=${maxSpeed.toFixed(2)} bodies=${bodiesRef.current.size}`;
       forceTick((t) => t + 1);
 
       restFramesRef.current = maxSpeed < SLEEP_SPEED ? restFramesRef.current + 1 : 0;
       if (restFramesRef.current > SLEEP_FRAMES) {
+        debugRef.current.status = 'asleep (at rest)';
         rafRef.current = null; // asleep — don't schedule another frame until woken
         return;
       }
@@ -342,8 +362,26 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
           <div
             ref={fieldRef}
             onPointerMove={handleFieldPointerMove}
-            style={{ position: 'relative', flex: 1, minHeight: 420, margin: '8px 0 0', overflow: 'hidden' }}
+            style={{ position: 'relative', flex: 1, minHeight: 'max(420px, 55vh)', margin: '8px 0 0', overflow: 'hidden' }}
           >
+            {/* Temporary on-screen diagnostic — see debugRef's comment above. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 4,
+                left: 4,
+                zIndex: 50,
+                fontSize: 9,
+                fontFamily: 'monospace',
+                color: '#fff',
+                background: 'rgba(0,0,0,0.6)',
+                padding: '3px 6px',
+                borderRadius: 6,
+                pointerEvents: 'none',
+              }}
+            >
+              rect={debugRef.current.rect} frame={debugRef.current.frame} {debugRef.current.status}
+            </div>
             {visibleItems.length === 0 ? (
               <p style={{ color: MUTED, textAlign: 'center', padding: 24 }}>No items in this category yet.</p>
             ) : (
