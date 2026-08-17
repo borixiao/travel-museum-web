@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import type { User } from 'firebase/auth';
 import {
   getItems,
@@ -18,7 +17,7 @@ import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { Item, ItemMetadata, Collection } from '../types';
-import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG, actionButtonStyle } from '../theme';
+import { SURFACE, FG, MUTED, BORDER, ACCENT, SOFT, actionButtonStyle, chipStyle, eyebrowStyle, pageBackground, FONT_DISPLAY } from '../theme';
 
 // Ref-map key for the Uncategorized row (scroll-to-row target) — distinct
 // from any real Collection id, which are Firestore-generated document ids.
@@ -338,23 +337,6 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     }
   }
 
-  // Shared pill style for the Browse Memories chip row — these are quick-
-  // jump links into the collection-rows list below (see scrollToRow), not
-  // filters, so there's no persistent "selected" chip. `emphasized` just
-  // matches the mockup's "全部/All Items" chip being the one solid-filled
-  // pill among otherwise-outlined ones.
-  function chipStyle(emphasized: boolean): CSSProperties {
-    return {
-      flexShrink: 0,
-      fontSize: 12,
-      padding: '6px 12px',
-      borderRadius: 999,
-      border: '1px solid ' + (emphasized ? TEXT_PRIMARY : BORDER_LIGHT),
-      background: emphasized ? TEXT_PRIMARY : CARD_BG,
-      color: emphasized ? '#fff' : TEXT_PRIMARY,
-      cursor: 'pointer',
-    };
-  }
 
 
   // One row per collection (plus Uncategorized) in the Browse Memories list
@@ -369,12 +351,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
           if (el) rowRefs.current.set(key, el);
           else rowRefs.current.delete(key);
         }}
-        style={{ background: CARD_BG, border: '1px solid ' + BORDER_LIGHT, borderRadius: 16, padding: 14 }}
+        style={{ background: SURFACE, border: '1px solid ' + BORDER, borderRadius: 16, padding: 14 }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY }}>{name}</div>
-            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: FG }}>{name}</div>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
               {rowItems.length} item{rowItems.length === 1 ? '' : 's'}
             </div>
           </div>
@@ -400,10 +382,10 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                   height: 64,
                   borderRadius: 10,
                   overflow: 'hidden',
-                  border: '1px solid ' + BORDER_LIGHT,
+                  border: '1px solid ' + BORDER,
                   padding: 0,
                   cursor: 'pointer',
-                  background: PLACEHOLDER_BG,
+                  background: SOFT,
                 }}
               >
                 {(item.stickerUrl ?? item.photos?.[0]) && (
@@ -417,7 +399,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
             ))}
           </div>
         ) : (
-          <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 10, marginBottom: 0 }}>No items yet.</p>
+          <p style={{ fontSize: 12, color: MUTED, marginTop: 10, marginBottom: 0 }}>No items yet.</p>
         )}
       </div>
     );
@@ -427,7 +409,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
       {!selected && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
@@ -438,14 +420,14 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
               />
             )}
-            <p style={{ color: TEXT_MUTED, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}>
+            <p style={{ ...eyebrowStyle, margin: 0 }}>
               {displayName ? `${displayName}'s Memory Museum` : 'Your Memory Museum'}
             </p>
           </div>
-          <h1 style={{ fontSize: 30, lineHeight: 1.3, margin: '0 0 8px', color: TEXT_PRIMARY, fontWeight: 700, letterSpacing: -0.5 }}>
+          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 29, lineHeight: 1.04, letterSpacing: '-.035em', margin: '5px 0 8px', color: FG, fontWeight: 650 }}>
             Turn your life into a museum you can collect.
           </h1>
-          <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 20px' }}>
+          <p style={{ fontSize: 13, color: MUTED, margin: '7px 0 20px' }}>
             Keep travel, relationships, and daily life in objects.
           </p>
 
@@ -496,9 +478,9 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 textAlign: 'left',
                 padding: '14px 14px',
                 borderRadius: 16,
-                border: '1px solid ' + BORDER_LIGHT,
-                background: CARD_BG,
-                color: TEXT_PRIMARY,
+                border: '1px solid ' + BORDER,
+                background: SURFACE,
+                color: FG,
                 cursor: 'pointer',
               }}
             >
@@ -508,7 +490,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                   height: 32,
                   flexShrink: 0,
                   borderRadius: '50%',
-                  background: PLACEHOLDER_BG,
+                  background: SOFT,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -520,18 +502,18 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               </span>
               <span>
                 <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>New Memory</span>
-                <span style={{ display: 'block', fontSize: 11, color: TEXT_MUTED, marginTop: 1 }}>Start a new collection</span>
+                <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 1 }}>Start a new collection</span>
               </span>
             </button>
           </div>
         </>
       )}
 
-      {items.length === 0 && <p style={{ color: TEXT_MUTED }}>No saved 3D models yet.</p>}
+      {items.length === 0 && <p style={{ color: MUTED }}>No saved 3D models yet.</p>}
 
       {!selected && recentItems.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 13, color: TEXT_MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
+          <h2 style={{ fontSize: 13, color: MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
             {recentItems.map((item) => (
               <button
@@ -540,12 +522,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 style={{
                   flexShrink: 0,
                   width: 96,
-                  border: '1px solid ' + BORDER_LIGHT,
+                  border: '1px solid ' + BORDER,
                   borderRadius: 12,
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
-                  background: CARD_BG,
+                  background: SURFACE,
                   textAlign: 'left',
                 }}
               >
@@ -556,12 +538,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block' }}
                   />
                 ) : (
-                  <div style={{ width: '100%', height: 72, background: PLACEHOLDER_BG }} />
+                  <div style={{ width: '100%', height: 72, background: SOFT }} />
                 )}
                 <div
                   style={{
                     fontSize: 11,
-                    color: TEXT_PRIMARY,
+                    color: FG,
                     padding: 4,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -578,7 +560,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
 
       {!selected && items.length > 0 && (
         <div style={{ marginTop: 20 }} ref={topRef}>
-          <h2 style={{ fontSize: 14, color: TEXT_PRIMARY, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
+          <h2 style={{ fontSize: 14, color: FG, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
             <button onClick={() => scrollToRow('top')} style={chipStyle(true)}>
               All Items
@@ -605,7 +587,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     }
                   }}
                   placeholder="Collection name"
-                  style={{ fontSize: 12, padding: '4px 8px', width: 120, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT }}
+                  style={{ fontSize: 12, padding: '4px 8px', width: 120, borderRadius: 6, border: '1px solid ' + BORDER }}
                   disabled={savingCollection}
                 />
                 <button onClick={handleCreateCollection} disabled={savingCollection || !newCollectionName.trim()} style={{ fontSize: 12 }}>
@@ -630,9 +612,9 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                   fontSize: 12,
                   padding: '6px 12px',
                   borderRadius: 999,
-                  border: '1px dashed ' + BORDER_LIGHT,
+                  border: '1px dashed ' + BORDER,
                   background: 'none',
-                  color: TEXT_MUTED,
+                  color: MUTED,
                   cursor: 'pointer',
                 }}
               >
@@ -655,7 +637,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: CARD_BG,
+                background: SURFACE,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
                 cursor: 'pointer',
                 fontSize: 18,
@@ -679,7 +661,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
 
           <div
             style={{
-              background: CARD_BG,
+              background: SURFACE,
               borderRadius: 20,
               marginTop: -20,
               position: 'relative',
@@ -688,7 +670,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
           >
             {editing ? (
               <div>
-                <h2 style={{ fontSize: 16, marginBottom: 8, color: TEXT_PRIMARY }}>Edit item details</h2>
+                <h2 style={{ fontSize: 16, marginBottom: 8, color: FG }}>Edit item details</h2>
                 <ItemMetadataForm value={editValue} onChange={setEditValue} />
                 {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -702,13 +684,13 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 13, color: TEXT_MUTED }}>
+                <div style={{ fontSize: 13, color: MUTED }}>
                   {[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}
                 </div>
-                <h2 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 8px', color: TEXT_PRIMARY }}>
+                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 650, margin: '4px 0 8px', color: FG }}>
                   {selected.name || 'Untitled item'}
                 </h2>
-                {selected.story && <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}
+                {selected.story && <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}
 
                 {selected.emotionTags && selected.emotionTags.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -721,7 +703,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                           border: '1px solid ' + ACCENT,
                           borderRadius: 999,
                           padding: '2px 10px',
-                          background: PLACEHOLDER_BG,
+                          background: SOFT,
                         }}
                       >
                         {tag}
@@ -734,11 +716,11 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     to also be the collection-reassignment control (a plain <select>
                     styled to sit inside the card) rather than a second, separate
                     control elsewhere on the page. */}
-                <div style={{ border: '1px solid ' + BORDER_LIGHT, borderRadius: 14, padding: 12, marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 2 }}>
+                <div style={{ border: '1px solid ' + BORDER, borderRadius: 14, padding: 12, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: FG, marginBottom: 2 }}>
                     Stored in {selected.collectionId ? collections.find((c) => c.id === selected.collectionId)?.name ?? 'Uncategorized' : 'Uncategorized'}
                   </div>
-                  <div style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: MUTED, marginBottom: 8 }}>
                     Kept together with the other items, photos, and stories in this memory.
                   </div>
                   <select
@@ -746,7 +728,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     value={selected.collectionId ?? ''}
                     onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
                     disabled={movingItem}
-                    style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT, padding: '3px 6px' }}
+                    style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER, padding: '3px 6px' }}
                   >
                     <option value="">Uncategorized</option>
                     {collections.map((c) => (
@@ -755,7 +737,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                       </option>
                     ))}
                   </select>
-                  {movingItem && <span style={{ fontSize: 12, color: TEXT_MUTED, marginLeft: 6 }}>Moving…</span>}
+                  {movingItem && <span style={{ fontSize: 12, color: MUTED, marginLeft: 6 }}>Moving…</span>}
                 </div>
                 {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: -12, marginBottom: 12 }}>{collectionsError}</p>}
 
@@ -793,7 +775,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
               <label
                 style={{
                   cursor: savingBackgroundImage ? 'default' : 'pointer',
-                  color: TEXT_MUTED,
+                  color: MUTED,
                   textDecoration: 'underline',
                   opacity: savingBackgroundImage ? 0.5 : 1,
                 }}
@@ -823,7 +805,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     background: 'none',
                     border: 'none',
                     padding: 0,
-                    color: TEXT_MUTED,
+                    color: MUTED,
                     textDecoration: 'underline',
                     cursor: savingBackgroundImage ? 'default' : 'pointer',
                     opacity: savingBackgroundImage ? 0.5 : 1,

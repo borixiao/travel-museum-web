@@ -12,7 +12,7 @@ import { getItems } from '../services/items';
 import { getCollections } from '../services/collections';
 import { getOrCreateMoodboard } from '../services/moodboard';
 import type { UserProfile } from '../types';
-import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG, actionButtonStyle } from '../theme';
+import { SURFACE, FG, MUTED, BORDER, ACCENT, SOFT, actionButtonStyle, dotsBackground, pageBackground, eyebrowStyle, FONT_DISPLAY } from '../theme';
 
 /** "Jane Doe" -> "JD", falls back to the first letter of the email local-part
  *  ("jane@x.com" -> "J") for accounts with no display name at all. */
@@ -208,7 +208,7 @@ export default function ProfilePage({ user }: { user: User }) {
   const memberSince = formatMemberSince(profile?.createdAt);
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
       <h1 style={{ textAlign: 'center', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Profile</h1>
       {profileError && <p style={{ color: 'crimson', fontSize: 13 }}>{profileError}</p>}
 
@@ -219,7 +219,7 @@ export default function ProfilePage({ user }: { user: User }) {
         style={{
           borderRadius: 20,
           padding: 20,
-          background: `${PLACEHOLDER_BG} radial-gradient(circle, ${BORDER_LIGHT} 1px, transparent 1px) 0 0 / 16px 16px`,
+          ...dotsBackground(),
         }}
       >
         <button
@@ -232,12 +232,12 @@ export default function ProfilePage({ user }: { user: User }) {
             width: 72,
             height: 72,
             borderRadius: '50%',
-            border: '3px solid ' + CARD_BG,
+            border: '3px solid ' + SURFACE,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             padding: 0,
             overflow: 'hidden',
             cursor: avatarUploading ? 'default' : 'pointer',
-            background: TEXT_PRIMARY,
+            background: FG,
             flexShrink: 0,
           }}
         >
@@ -255,7 +255,7 @@ export default function ProfilePage({ user }: { user: User }) {
           onChange={(e) => handleAvatarFileChange(e.target.files?.[0])}
         />
 
-        {memberSince && <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 14 }}>Member since {memberSince}</div>}
+        {memberSince && <div style={{ ...eyebrowStyle, marginTop: 14 }}>Member since {memberSince}</div>}
 
         {editingName ? (
           <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
@@ -264,7 +264,7 @@ export default function ProfilePage({ user }: { user: User }) {
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               autoFocus
-              style={{ flex: 1, minWidth: 0, fontSize: 20, borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '4px 8px' }}
+              style={{ flex: 1, minWidth: 0, fontSize: 20, borderRadius: 8, border: '1px solid ' + BORDER, padding: '4px 8px' }}
             />
             <button onClick={handleSaveName} disabled={savingName} style={actionButtonStyle('primary', savingName)}>
               {savingName ? '…' : 'Save'}
@@ -275,17 +275,17 @@ export default function ProfilePage({ user }: { user: User }) {
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 28, fontWeight: 700 }}>{displayName || 'Add your name'}</span>
+            <span style={{ fontFamily: FONT_DISPLAY, fontSize: 36, lineHeight: 1, fontWeight: 650 }}>{displayName || 'Add your name'}</span>
             <button
               type="button"
               onClick={startEditingName}
-              style={{ fontSize: 12, background: 'none', border: 'none', color: TEXT_MUTED, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              style={{ fontSize: 12, background: 'none', border: 'none', color: MUTED, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
             >
               Edit
             </button>
           </div>
         )}
-        <div style={{ fontSize: 13, color: TEXT_MUTED, marginTop: 2 }}>
+        <div style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>
           {collectionCount ?? '—'} memor{collectionCount === 1 ? 'y' : 'ies'} · {itemCount ?? '—'} item{itemCount === 1 ? '' : 's'}
         </div>
         {nameError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{nameError}</p>}
@@ -306,8 +306,8 @@ export default function ProfilePage({ user }: { user: User }) {
           marginTop: 12,
           padding: 14,
           borderRadius: 16,
-          border: '1px solid ' + BORDER_LIGHT,
-          background: CARD_BG,
+          border: '1px solid ' + BORDER,
+          background: SURFACE,
           cursor: moodboard?.published ? 'pointer' : 'default',
         }}
       >
@@ -317,7 +317,7 @@ export default function ProfilePage({ user }: { user: User }) {
             height: 40,
             flexShrink: 0,
             borderRadius: 12,
-            background: PLACEHOLDER_BG,
+            background: SOFT,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -327,8 +327,8 @@ export default function ProfilePage({ user }: { user: User }) {
           🔗
         </span>
         <span>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: TEXT_PRIMARY }}>Shared Links</span>
-          <span style={{ display: 'block', fontSize: 12, color: TEXT_MUTED, marginTop: 1 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Shared Links</span>
+          <span style={{ display: 'block', fontSize: 12, color: MUTED, marginTop: 1 }}>
             {linkCopied ? 'Link copied!' : moodboard?.published ? 'Tap to copy your Moodboard link' : 'No shared links yet'}
           </span>
         </span>
@@ -349,8 +349,8 @@ export default function ProfilePage({ user }: { user: User }) {
           marginTop: 12,
           padding: 14,
           borderRadius: 16,
-          border: '1px solid ' + BORDER_LIGHT,
-          background: CARD_BG,
+          border: '1px solid ' + BORDER,
+          background: SURFACE,
           cursor: 'pointer',
         }}
       >
@@ -360,7 +360,7 @@ export default function ProfilePage({ user }: { user: User }) {
             height: 40,
             flexShrink: 0,
             borderRadius: 12,
-            background: PLACEHOLDER_BG,
+            background: SOFT,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -370,14 +370,14 @@ export default function ProfilePage({ user }: { user: User }) {
           ⚙️
         </span>
         <span>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: TEXT_PRIMARY }}>Settings</span>
-          <span style={{ display: 'block', fontSize: 12, color: TEXT_MUTED, marginTop: 1 }}>Password & account</span>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: FG }}>Settings</span>
+          <span style={{ display: 'block', fontSize: 12, color: MUTED, marginTop: 1 }}>Password & account</span>
         </span>
       </button>
 
       {settingsOpen && (
-        <div style={{ marginTop: 8, padding: 14, borderRadius: 16, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG }}>
-          <div style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 10 }}>{user.email}</div>
+        <div style={{ marginTop: 8, padding: 14, borderRadius: 16, border: '1px solid ' + BORDER, background: SURFACE }}>
+          <div style={{ fontSize: 13, color: MUTED, marginBottom: 10 }}>{user.email}</div>
 
           {!showPasswordForm ? (
             <button
@@ -393,14 +393,14 @@ export default function ProfilePage({ user }: { user: User }) {
             </button>
           ) : (
             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <h2 style={{ fontSize: 14, margin: 0, color: TEXT_PRIMARY }}>Change password</h2>
+              <h2 style={{ fontSize: 14, margin: 0, color: FG }}>Change password</h2>
               <input
                 type="password"
                 placeholder="Current password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
-                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER, padding: '6px 8px' }}
               />
               <input
                 type="password"
@@ -409,7 +409,7 @@ export default function ProfilePage({ user }: { user: User }) {
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
                 minLength={6}
-                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER, padding: '6px 8px' }}
               />
               <input
                 type="password"
@@ -418,7 +418,7 @@ export default function ProfilePage({ user }: { user: User }) {
                 onChange={(e) => setConfirmNewPassword(e.target.value)}
                 required
                 minLength={6}
-                style={{ borderRadius: 8, border: '1px solid ' + BORDER_LIGHT, padding: '6px 8px' }}
+                style={{ borderRadius: 8, border: '1px solid ' + BORDER, padding: '6px 8px' }}
               />
               {passwordError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{passwordError}</p>}
               <div style={{ display: 'flex', gap: 8 }}>
