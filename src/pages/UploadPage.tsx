@@ -41,7 +41,7 @@ const WIZARD_COPY: Record<PhotoSlot, { title: string; heading: string; subtitle:
 
 type Status = 'idle' | 'uploading' | 'generating' | 'preview' | 'error' | 'saving' | 'saved';
 
-export default function UploadPage({ user }: { user: User }) {
+export default function UploadPage({ user, onExit }: { user: User; onExit?: () => void }) {
   const [photos, setPhotos] = useState<Partial<Record<PhotoSlot, File>>>({});
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
@@ -317,9 +317,9 @@ export default function UploadPage({ user }: { user: User }) {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-          {wizardIndex > 0 ? (
+          {wizardIndex > 0 || onExit ? (
             <button
-              onClick={() => setWizardIndex((i) => i - 1)}
+              onClick={() => (wizardIndex > 0 ? setWizardIndex((i) => i - 1) : onExit?.())}
               aria-label="Back"
               style={{
                 width: 36,

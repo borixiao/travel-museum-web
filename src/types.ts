@@ -113,6 +113,11 @@ export interface MoodboardCard {
 export interface Moodboard {
   id: string;
   userId: string;
+  /** Which Collection (Memory) this canvas belongs to — `null` for the
+   *  Uncategorized bucket's canvas. Each Collection gets its own Moodboard
+   *  doc (matches the design handoff's "画布是每段记忆的属性" model), rather
+   *  than the single per-user board this app started with. */
+  collectionId: string | null;
   title: string;
   published: boolean;
   cards: MoodboardCard[];
