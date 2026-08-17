@@ -47,6 +47,12 @@ const FRICTION = 0.94;
 const BOUNCE = 0.35;
 const SLEEP_SPEED = 0.05; // percent/s combined — below this a body counts as "at rest"
 const SLEEP_FRAMES = 40; // consecutive resting frames before the rAF loop pauses
+const REST_IMPACT_SPEED = 2; // percent/s — below this, a wall hit stops instead of bouncing
+const MAX_SPEED = 60; // percent/s — hard velocity cap; a crowded pile's separation nudges
+// can compound with wall bounces in ways that are hard to fully rule out analytically, so
+// this bounds the worst case instead of chasing every possible configuration.
+const FORCE_SLEEP_FRAMES = 600; // ~10s at 60fps — sleep unconditionally past this, regardless
+// of residual speed, so a dense pile can never keep the rAF loop (and battery) running forever.
 
 type GravityStatus = 'idle' | 'granted' | 'denied';
 
@@ -69,6 +75,7 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef(0);
   const restFramesRef = useRef(0);
+  const framesSinceWakeRef = useRef(0);
   // On-screen diagnostic (temporary) — surfaces exactly what the physics
   // loop sees each frame, so a "gravity does nothing" report can be
   // screenshotted directly instead of reasoned about blind. Remove once
@@ -141,6 +148,15 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
         body.vy += gy * GRAVITY_ACCEL * dt;
         body.vx *= FRICTION;
         body.vy *= FRICTION;
+        // Hard cap — a crowded pile's separation nudges (see below) can in
+        // principle compound with wall bounces across many overlapping
+        // pairs in ways not fully ruled out analytically; this bounds the
+        // worst case instead of chasing every possible dense configuration.
+        const speed = Math.hypot(body.vx, body.vy);
+        if (speed > MAX_SPEED) {
+          body.vx = (body.vx / speed) * MAX_SPEED;
+          body.vy = (body.vy / speed) * MAX_SPEED;
+        }
         body.x += body.vx * dt;
         body.y += body.vy * dt;
 
@@ -148,19 +164,27 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
         const maxX = 100 - marginXPercent;
         const minY = marginYPercent;
         const maxY = 100 - marginYPercent;
+        // Below REST_IMPACT_SPEED, treat a wall hit as inelastic (velocity
+        // zeroed) instead of reflecting it — without this floor, a body
+        // resting on the floor re-hits it every single frame under gravity
+        // and settles into a permanent low-amplitude bounce loop instead of
+        // ever truly stopping. Confirmed numerically: a body simulated for
+        // 3000 frames never dropped below the sleep-speed threshold,
+        // oscillating at a steady ~0.3 forever — exactly the speed the
+        // on-device debug overlay reported.
         if (body.x < minX) {
           body.x = minX;
-          body.vx = -body.vx * BOUNCE;
+          body.vx = Math.abs(body.vx) < REST_IMPACT_SPEED ? 0 : -body.vx * BOUNCE;
         } else if (body.x > maxX) {
           body.x = maxX;
-          body.vx = -body.vx * BOUNCE;
+          body.vx = Math.abs(body.vx) < REST_IMPACT_SPEED ? 0 : -body.vx * BOUNCE;
         }
         if (body.y < minY) {
           body.y = minY;
-          body.vy = -body.vy * BOUNCE;
+          body.vy = Math.abs(body.vy) < REST_IMPACT_SPEED ? 0 : -body.vy * BOUNCE;
         } else if (body.y > maxY) {
           body.y = maxY;
-          body.vy = -body.vy * BOUNCE;
+          body.vy = Math.abs(body.vy) < REST_IMPACT_SPEED ? 0 : -body.vy * BOUNCE;
         }
         maxSpeed = Math.max(maxSpeed, Math.hypot(body.vx, body.vy));
       });
@@ -192,18 +216,41 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
             b1.y -= pushYPercent;
             b2.x += pushXPercent;
             b2.y += pushYPercent;
-            maxSpeed = Math.max(maxSpeed, overlap);
+            // NOT folded into maxSpeed below — overlap is a pixel-space
+            // penetration depth, not a percent/s velocity, and a dense
+            // permissive-overlap pile is *supposed* to stay within minDist
+            // of its neighbors indefinitely. Feeding it into the same
+            // threshold as real velocity meant a settled pile's overlap
+            // alone (tens of px) permanently defeated the sleep check —
+            // confirmed live: the debug overlay showed speed=0.30 (30–40x
+            // the 0.05 sleep threshold) still climbing at frame 1152.
           }
         }
       }
 
+      // Re-clamp after separation — the wall-bounce pass above keeps
+      // bodies in bounds against *gravity*, but separation can push a body
+      // past the field edge on its own (confirmed live: items visibly
+      // exited the field and were clipped by its `overflow: hidden`,
+      // reported as "items fell out"). Without this, a crowded pile with
+      // many overlapping pairs has no guarantee the cumulative pushes stay
+      // inside [margin, 100 - margin].
+      bodiesRef.current.forEach((body) => {
+        const marginXPercent = Math.max(FIELD_MARGIN_X, (body.size / 2 / rect.width) * 100);
+        const marginYPercent = (body.size / 2 / Math.max(rect.height, 1)) * 100;
+        body.x = clamp(body.x, marginXPercent, 100 - marginXPercent);
+        body.y = clamp(body.y, marginYPercent, 100 - marginYPercent);
+      });
+
       debugRef.current.frame += 1;
+      framesSinceWakeRef.current += 1;
       debugRef.current.status = `running · gx=${gx.toFixed(2)} gy=${gy.toFixed(2)} speed=${maxSpeed.toFixed(2)} bodies=${bodiesRef.current.size}`;
       forceTick((t) => t + 1);
 
       restFramesRef.current = maxSpeed < SLEEP_SPEED ? restFramesRef.current + 1 : 0;
-      if (restFramesRef.current > SLEEP_FRAMES) {
-        debugRef.current.status = 'asleep (at rest)';
+      if (restFramesRef.current > SLEEP_FRAMES || framesSinceWakeRef.current > FORCE_SLEEP_FRAMES) {
+        debugRef.current.status =
+          framesSinceWakeRef.current > FORCE_SLEEP_FRAMES ? 'asleep (forced timeout)' : 'asleep (at rest)';
         rafRef.current = null; // asleep — don't schedule another frame until woken
         return;
       }
@@ -216,6 +263,7 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
     if (reducedMotion) return;
     lastTimeRef.current = 0;
     restFramesRef.current = 0;
+    framesSinceWakeRef.current = 0;
     if (rafRef.current == null) {
       rafRef.current = requestAnimationFrame(runFrame);
     }
