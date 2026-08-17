@@ -1,21 +1,74 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { getItems } from '../services/items';
 import type { Item } from '../types';
-import { SURFACE, FG, MUTED, BORDER, SOFT, pageBackground, chipStyle, eyebrowStyle } from '../theme';
+import { SURFACE, FG, MUTED, BORDER, SOFT, ACCENT, pageBackground, chipStyle } from '../theme';
 
-// PRD's "物件" (Items) screen — the flat, searchable/sortable library of
-// every item regardless of which Memory/Collection it's filed under.
-// Reintroduces the grid Home used to show directly (removed when Home
-// switched to one-row-per-collection browsing) as its own top-level screen,
-// matching the design handoff's separate `记忆`/`物件` tabs.
+// PRD's "物件" (Items) screen. The design handoff's actual version isn't a
+// searchable grid — it's a free scatter of objects with an optional
+// "gravity" mode that follows the device's tilt (falling back to the
+// pointer on desktop), filtered by a row of chips. Rebuilt to match that
+// interaction model instead of the search+sort+CSS-grid this screen used
+// to be. The handoff's own filter chips are 全部/2D/3D/生成中 (keyed to
+// model-generation status) — that doesn't map onto this app's data (an item
+// is only ever saved *after* its 3D model finishes, so "generating" can
+// never apply to a saved item here), so the chips are item `type` values
+// instead, same as every other type-filter already in this app.
+
+interface Body {
+  id: string;
+  x: number; // percent, 0-100
+  y: number; // percent, 0-100
+  vx: number;
+  vy: number;
+  size: number; // px
+  rotate: number; // deg — fixed per item, physics doesn't touch it
+}
+
+// Deterministic pseudo-random in [0, 1) from a string seed, so each item's
+// starting scatter position/size/tilt is stable across re-renders instead
+// of jumping around whenever `items` re-fetches.
+function seededRandom(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h << 5) - h + seed.charCodeAt(i);
+    h |= 0;
+  }
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+const FIELD_MARGIN_X = 8; // percent — keeps a body's left/right edge off the wall
+const GRAVITY_ACCEL = 70; // percent/s^2
+const FRICTION = 0.94;
+const BOUNCE = 0.35;
+const SLEEP_SPEED = 0.05; // percent/s combined — below this a body counts as "at rest"
+const SLEEP_FRAMES = 40; // consecutive resting frames before the rAF loop pauses
+
+type GravityStatus = 'idle' | 'granted' | 'denied';
+
 export default function ItemsPage({ user, onSelectItem }: { user: User; onSelectItem: (item: Item) => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('All');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'location' | 'type'>('newest');
+  const [gravityStatus, setGravityStatus] = useState<GravityStatus>('idle');
+  const [, forceTick] = useState(0);
+
+  const reducedMotion = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const bodiesRef = useRef<Map<string, Body>>(new Map());
+  const gravityVecRef = useRef<{ x: number; y: number }>({ x: 0, y: 1 });
+  const rafRef = useRef<number | null>(null);
+  const lastTimeRef = useRef(0);
+  const restFramesRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,121 +96,276 @@ export default function ItemsPage({ user, onSelectItem }: { user: User; onSelect
     return ['All', ...Array.from(seen).sort((a, b) => a.localeCompare(b))];
   }, [items]);
 
-  const displayedItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    let result = items.filter((item) => {
-      if (filterType !== 'All' && item.type !== filterType) return false;
-      if (!q) return true;
-      return (
-        (item.name ?? '').toLowerCase().includes(q) ||
-        (item.location ?? '').toLowerCase().includes(q) ||
-        (item.type ?? '').toLowerCase().includes(q)
-      );
-    });
-    if (sortBy === 'oldest') {
-      result = [...result].reverse();
-    } else if (sortBy === 'location') {
-      result = [...result].sort((a, b) => (a.location ?? '').localeCompare(b.location ?? ''));
-    } else if (sortBy === 'type') {
-      result = [...result].sort((a, b) => (a.type ?? '').localeCompare(b.type ?? ''));
+  const visibleItems = useMemo(
+    () => items.filter((item) => filterType === 'All' || item.type === filterType),
+    [items, filterType],
+  );
+
+  const runFrame = useCallback(
+    (timestamp: number) => {
+      const field = fieldRef.current;
+      if (!field) {
+        rafRef.current = null;
+        return;
+      }
+      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
+      const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05);
+      lastTimeRef.current = timestamp;
+
+      const rect = field.getBoundingClientRect();
+      const { x: gx, y: gy } = gravityVecRef.current;
+      let maxSpeed = 0;
+
+      bodiesRef.current.forEach((body) => {
+        const marginXPercent = Math.max(FIELD_MARGIN_X, (body.size / 2 / rect.width) * 100);
+        const marginYPercent = (body.size / 2 / Math.max(rect.height, 1)) * 100;
+
+        body.vx += gx * GRAVITY_ACCEL * dt;
+        body.vy += gy * GRAVITY_ACCEL * dt;
+        body.vx *= FRICTION;
+        body.vy *= FRICTION;
+        body.x += body.vx * dt;
+        body.y += body.vy * dt;
+
+        const minX = marginXPercent;
+        const maxX = 100 - marginXPercent;
+        const minY = marginYPercent;
+        const maxY = 100 - marginYPercent;
+        if (body.x < minX) {
+          body.x = minX;
+          body.vx = -body.vx * BOUNCE;
+        } else if (body.x > maxX) {
+          body.x = maxX;
+          body.vx = -body.vx * BOUNCE;
+        }
+        if (body.y < minY) {
+          body.y = minY;
+          body.vy = -body.vy * BOUNCE;
+        } else if (body.y > maxY) {
+          body.y = maxY;
+          body.vy = -body.vy * BOUNCE;
+        }
+        maxSpeed = Math.max(maxSpeed, Math.hypot(body.vx, body.vy));
+      });
+
+      forceTick((t) => t + 1);
+
+      restFramesRef.current = maxSpeed < SLEEP_SPEED ? restFramesRef.current + 1 : 0;
+      if (restFramesRef.current > SLEEP_FRAMES) {
+        rafRef.current = null; // asleep — don't schedule another frame until woken
+        return;
+      }
+      rafRef.current = requestAnimationFrame(runFrame);
+    },
+    [],
+  );
+
+  const wake = useCallback(() => {
+    if (reducedMotion) return;
+    lastTimeRef.current = 0;
+    restFramesRef.current = 0;
+    if (rafRef.current == null) {
+      rafRef.current = requestAnimationFrame(runFrame);
     }
-    return result;
-  }, [items, searchQuery, filterType, sortBy]);
+  }, [reducedMotion, runFrame]);
+
+  // Seeds a Body for every newly-visible item (stable per item id, so
+  // switching filters doesn't reshuffle items that stay visible) and drops
+  // ones that scrolled out of the current filter, then wakes the sim so
+  // any newly-added items actually fall into place.
+  useEffect(() => {
+    const bodies = bodiesRef.current;
+    const visibleIds = new Set(visibleItems.map((it) => it.id));
+    for (const id of bodies.keys()) {
+      if (!visibleIds.has(id)) bodies.delete(id);
+    }
+    visibleItems.forEach((item) => {
+      if (bodies.has(item.id)) return;
+      const rx = seededRandom(item.id + 'x');
+      const ry = seededRandom(item.id + 'y');
+      const rs = seededRandom(item.id + 's');
+      const rr = seededRandom(item.id + 'r');
+      bodies.set(item.id, {
+        id: item.id,
+        x: FIELD_MARGIN_X + rx * (100 - FIELD_MARGIN_X * 2),
+        // Start in the upper half so there's somewhere for gravity to drop
+        // them from, matching the handoff's "物件已下落" (items have
+        // already fallen) framing rather than spawning already at rest.
+        y: 10 + ry * 30,
+        vx: 0,
+        vy: 0,
+        size: 64 + Math.round(rs * 18),
+        rotate: Math.round((rr - 0.5) * 24),
+      });
+    });
+    forceTick((t) => t + 1);
+    wake();
+  }, [visibleItems, wake]);
+
+  const handleOrientation = useCallback(
+    (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return;
+      gravityVecRef.current = { x: clamp(e.gamma / 30, -1, 1), y: clamp(e.beta / 30, -1, 1) };
+      setGravityStatus('granted');
+      wake();
+    },
+    [wake],
+  );
+
+  // Android/desktop browsers expose DeviceOrientationEvent without a
+  // permission gate — safe to just start listening. iOS 13+ requires an
+  // explicit user-gesture request instead (the button below).
+  useEffect(() => {
+    if (reducedMotion) return;
+    const OrientationCtor = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    if (OrientationCtor && typeof OrientationCtor.requestPermission !== 'function') {
+      window.addEventListener('deviceorientation', handleOrientation);
+      return () => window.removeEventListener('deviceorientation', handleOrientation);
+    }
+  }, [reducedMotion, handleOrientation]);
+
+  async function handleEnableGravity() {
+    const OrientationCtor = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    if (!OrientationCtor?.requestPermission) return;
+    try {
+      const result = await OrientationCtor.requestPermission();
+      if (result === 'granted') {
+        window.addEventListener('deviceorientation', handleOrientation);
+      } else {
+        setGravityStatus('denied');
+      }
+    } catch {
+      setGravityStatus('denied');
+    }
+  }
+
+  // Desktop fallback — pointer position over the field substitutes for
+  // tilt, same as the handoff's "倾斜手机或移动指针" (tilt your phone or
+  // move your pointer) copy. Only active before real device tilt has taken
+  // over, so it doesn't fight a live sensor reading on mobile.
+  function handleFieldPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (gravityStatus === 'granted') return;
+    const field = fieldRef.current;
+    if (!field) return;
+    const rect = field.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    gravityVecRef.current = { x: clamp((px - 0.5) * 2, -1, 1), y: clamp((py - 0.5) * 2, -1, 1) };
+    wake();
+  }
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  function gravityLabel(): string {
+    if (gravityStatus === 'denied') return 'Motion access denied';
+    if (gravityStatus === 'granted') return 'Following your phone’s tilt';
+    const OrientationCtor = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    return OrientationCtor?.requestPermission ? 'Items have settled · Enable tilt' : 'Items have settled · Tilt or move your pointer';
+  }
 
   if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Loading your items…</p>;
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '20px 18px 40px', color: FG }}>
-      <h1 style={{ textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: '0 0 16px' }}>Items</h1>
+    <div
+      style={{
+        maxWidth: 640,
+        margin: '0 auto',
+        minHeight: '100vh',
+        boxSizing: 'border-box',
+        ...pageBackground,
+        color: FG,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <h1 style={{ textAlign: 'center', fontSize: 18, letterSpacing: '-.02em', margin: '20px 0 12px', padding: '0 18px' }}>Items</h1>
 
       {items.length === 0 ? (
-        <p style={{ color: MUTED, textAlign: 'center' }}>No saved items yet — scan one from Home to get started.</p>
+        <p style={{ color: MUTED, textAlign: 'center', padding: '0 18px' }}>No saved items yet — scan one from Home to get started.</p>
       ) : (
         <>
-          <input
-            type="search"
-            placeholder="Search by name, location, or type…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid ' + BORDER,
-              background: SURFACE,
-              color: FG,
-            }}
-          />
-
-          {typeOptions.length > 1 && (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 10, paddingBottom: 4 }}>
-              {typeOptions.map((t) => (
-                <button key={t} onClick={() => setFilterType(t)} style={chipStyle(filterType === t)}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
-            <label htmlFor="items-sort-select" style={eyebrowStyle}>
-              Sort
-            </label>
-            <select
-              id="items-sort-select"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER, padding: '3px 6px' }}
-            >
-              <option value="newest">Date (newest first)</option>
-              <option value="oldest">Date (oldest first)</option>
-              <option value="location">Location (A–Z)</option>
-              <option value="type">Type (A–Z)</option>
-            </select>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 18px 4px' }}>
+            {typeOptions.map((t) => (
+              <button key={t} onClick={() => setFilterType(t)} style={chipStyle(filterType === t)}>
+                {t}
+              </button>
+            ))}
           </div>
 
-          {displayedItems.length === 0 ? (
-            <p style={{ color: MUTED, fontSize: 13, marginTop: 20 }}>No items match your search/filter.</p>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginTop: 16 }}>
-              {displayedItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectItem(item)}
-                  style={{
-                    border: '1px solid ' + BORDER,
-                    borderRadius: 12,
-                    padding: 0,
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    background: SURFACE,
-                    textAlign: 'left',
-                  }}
-                >
-                  {item.stickerUrl ?? item.photos?.[0] ? (
-                    <img
-                      src={item.stickerUrl ?? item.photos![0]}
-                      alt="item thumbnail"
-                      style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
-                    />
-                  ) : (
-                    <div style={{ width: '100%', height: 120, background: SOFT }} />
-                  )}
-                  <div style={{ padding: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: FG, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.name || 'Untitled item'}
-                    </div>
-                    <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                      {item.type ?? 'Click to view'}
-                      {item.location ? ` · ${item.location}` : ''}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+          <div
+            ref={fieldRef}
+            onPointerMove={handleFieldPointerMove}
+            style={{ position: 'relative', flex: 1, minHeight: 420, margin: '8px 0 0', overflow: 'hidden' }}
+          >
+            {visibleItems.length === 0 ? (
+              <p style={{ color: MUTED, textAlign: 'center', padding: 24 }}>No items in this category yet.</p>
+            ) : (
+              visibleItems.map((item) => {
+                const body = bodiesRef.current.get(item.id);
+                if (!body) return null;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectItem(item)}
+                    aria-label={item.name || 'Untitled item'}
+                    style={{
+                      position: 'absolute',
+                      left: `${body.x}%`,
+                      top: `${body.y}%`,
+                      width: body.size,
+                      height: body.size,
+                      transform: `translate(-50%, -50%) rotate(${body.rotate}deg)`,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      border: '1px solid ' + BORDER,
+                      padding: 0,
+                      cursor: 'pointer',
+                      background: SURFACE,
+                      boxShadow: '0 6px 14px rgba(0,0,0,0.12)',
+                    }}
+                  >
+                    {item.stickerUrl ?? item.photos?.[0] ? (
+                      <img
+                        src={item.stickerUrl ?? item.photos![0]}
+                        alt=""
+                        draggable={false}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                      />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: SOFT }} />
+                    )}
+                  </button>
+                );
+              })
+            )}
+
+            {!reducedMotion && (
+              <button
+                onClick={handleEnableGravity}
+                disabled={gravityStatus === 'granted'}
+                style={{
+                  position: 'absolute',
+                  right: 18,
+                  bottom: 18,
+                  fontSize: 11,
+                  padding: '8px 14px',
+                  borderRadius: 999,
+                  border: '1px solid ' + BORDER,
+                  background: `color-mix(in oklch, ${SURFACE} 88%, transparent)`,
+                  backdropFilter: 'blur(12px)',
+                  color: gravityStatus === 'granted' ? ACCENT : MUTED,
+                  cursor: gravityStatus === 'granted' ? 'default' : 'pointer',
+                }}
+              >
+                {gravityLabel()}
+              </button>
+            )}
+          </div>
         </>
       )}
     </div>
