@@ -9,7 +9,7 @@ import ModelViewer from '../components/ModelViewer';
 import ProgressBar from '../components/ProgressBar';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
 import type { PhotoSlot, ItemMetadata, Collection } from '../types';
-import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
+import { SURFACE, FG, MUTED, BORDER, ACCENT, dotsBackground, pageBackground, FONT_DISPLAY } from '../theme';
 
 const SLOTS: PhotoSlot[] = ['front', 'left', 'back', 'right'];
 
@@ -315,7 +315,7 @@ export default function UploadPage({ user }: { user: User }) {
     const copy = WIZARD_COPY[slot];
 
     return (
-      <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+      <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
           {wizardIndex > 0 ? (
             <button
@@ -326,7 +326,7 @@ export default function UploadPage({ user }: { user: User }) {
                 height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: CARD_BG,
+                background: SURFACE,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
                 cursor: 'pointer',
                 fontSize: 18,
@@ -361,13 +361,13 @@ export default function UploadPage({ user }: { user: User }) {
             padding: 0,
             cursor: 'pointer',
             overflow: 'hidden',
-            background: `${PLACEHOLDER_BG} radial-gradient(circle, ${BORDER_LIGHT} 1px, transparent 1px) 0 0 / 16px 16px`,
+            ...dotsBackground(),
           }}
         >
           {preview ? (
             <img src={preview} alt={`${slot} preview`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: TEXT_MUTED }}>
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: MUTED }}>
               <span style={{ fontSize: 32 }}>📷</span>
               <span style={{ fontSize: 12 }}>Tap to scan</span>
             </div>
@@ -396,8 +396,8 @@ export default function UploadPage({ user }: { user: User }) {
           }}
         />
 
-        <h2 style={{ fontSize: 22, fontWeight: 700, margin: '24px 0 8px', lineHeight: 1.3 }}>{copy.heading}</h2>
-        <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 24px' }}>{copy.subtitle}</p>
+        <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 650, margin: '24px 0 8px', lineHeight: 1.1 }}>{copy.heading}</h2>
+        <p style={{ fontSize: 14, color: MUTED, margin: '0 0 24px' }}>{copy.subtitle}</p>
 
         <button
           onClick={() => {
@@ -410,7 +410,7 @@ export default function UploadPage({ user }: { user: User }) {
         </button>
         <button
           onClick={() => wizardLibraryInputRef.current?.click()}
-          style={{ width: '100%', padding: '14px', borderRadius: 16, border: '1px solid ' + BORDER_LIGHT, background: CARD_BG, color: TEXT_PRIMARY, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 10 }}
+          style={{ width: '100%', padding: '14px', borderRadius: 16, border: '1px solid ' + BORDER, background: SURFACE, color: FG, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 10 }}
         >
           Choose from Photo Library
         </button>
@@ -418,7 +418,7 @@ export default function UploadPage({ user }: { user: User }) {
         {isRequired ? (
           <button
             onClick={() => wizardLibraryInputRef.current?.click()}
-            style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
+            style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
           >
             Camera not working?
           </button>
@@ -426,7 +426,7 @@ export default function UploadPage({ user }: { user: User }) {
           !preview && (
             <button
               onClick={() => setWizardIndex((i) => i + 1)}
-              style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
+              style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: MUTED, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
             >
               Skip this angle
             </button>
@@ -437,10 +437,10 @@ export default function UploadPage({ user }: { user: User }) {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, padding: '24px 16px 40px', color: FG }}>
       <button
         onClick={() => setWizardIndex(0)}
-        style={{ background: 'none', border: 'none', color: TEXT_MUTED, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 12 }}
+        style={{ background: 'none', border: 'none', color: MUTED, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 12 }}
       >
         ‹ Retake photos
       </button>
@@ -454,18 +454,18 @@ export default function UploadPage({ user }: { user: User }) {
         </p>
       )}
       {hasFront && hasMinPhotos && photoCount < 4 && (
-        <p style={{ color: TEXT_MUTED, fontSize: 12, marginBottom: 8 }}>
+        <p style={{ color: MUTED, fontSize: 12, marginBottom: 8 }}>
           Tip: adding more angles improves model quality, though you have enough to generate now.
         </p>
       )}
 
       <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px' }}>Item details</h2>
       {classifyingType && (
-        <p style={{ color: TEXT_MUTED, fontSize: 12, marginBottom: 4 }}>AI is identifying this item…</p>
+        <p style={{ color: MUTED, fontSize: 12, marginBottom: 4 }}>AI is identifying this item…</p>
       )}
       <ItemMetadataForm value={metadata} onChange={setMetadata} nameRequired />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: TEXT_MUTED }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: MUTED }}>
         <label htmlFor="new-item-collection-select">Collection:</label>
         <select
           id="new-item-collection-select"
@@ -533,8 +533,8 @@ export default function UploadPage({ user }: { user: User }) {
           padding: '14px',
           borderRadius: 16,
           border: 'none',
-          background: canGenerate ? ACCENT : BORDER_LIGHT,
-          color: canGenerate ? '#fff' : TEXT_MUTED,
+          background: canGenerate ? ACCENT : BORDER,
+          color: canGenerate ? '#fff' : MUTED,
           fontWeight: 700,
           fontSize: 15,
           cursor: canGenerate ? 'pointer' : 'default',

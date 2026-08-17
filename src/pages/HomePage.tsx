@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import type { User } from 'firebase/auth';
 import {
   getItems,
@@ -16,10 +15,26 @@ import { modelProxyUrl } from '../services/tripoClient';
 import { generateStickerFromUrl } from '../services/stickerClient';
 import { addItemToMoodboard } from '../services/moodboard';
 import ModelViewer from '../components/ModelViewer';
-import PhotoGallery from '../components/PhotoGallery';
 import ItemMetadataForm, { emptyItemMetadata } from '../components/ItemMetadataForm';
+import Icon from '../components/Icon';
 import type { Item, ItemMetadata, Collection } from '../types';
-import { PAGE_BG, CARD_BG, TEXT_PRIMARY, TEXT_MUTED, BORDER_LIGHT, ACCENT, PLACEHOLDER_BG } from '../theme';
+import {
+  SURFACE,
+  FG,
+  MUTED,
+  BORDER,
+  ACCENT,
+  SOFT,
+  actionButtonStyle,
+  chipStyle,
+  eyebrowStyle,
+  pageBackground,
+  FONT_DISPLAY,
+  stickyHeaderStyle,
+  entryButtonStyle,
+  entryIconWrapStyle,
+  galleryLabelStyle,
+} from '../theme';
 
 // Ref-map key for the Uncategorized row (scroll-to-row target) — distinct
 // from any real Collection id, which are Firestore-generated document ids.
@@ -339,23 +354,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
     }
   }
 
-  // Shared pill style for the Browse Memories chip row — these are quick-
-  // jump links into the collection-rows list below (see scrollToRow), not
-  // filters, so there's no persistent "selected" chip. `emphasized` just
-  // matches the mockup's "全部/All Items" chip being the one solid-filled
-  // pill among otherwise-outlined ones.
-  function chipStyle(emphasized: boolean): CSSProperties {
-    return {
-      flexShrink: 0,
-      fontSize: 12,
-      padding: '6px 12px',
-      borderRadius: 999,
-      border: '1px solid ' + (emphasized ? TEXT_PRIMARY : BORDER_LIGHT),
-      background: emphasized ? TEXT_PRIMARY : CARD_BG,
-      color: emphasized ? '#fff' : TEXT_PRIMARY,
-      cursor: 'pointer',
-    };
-  }
+
 
   // One row per collection (plus Uncategorized) in the Browse Memories list
   // below — factored out since the two call sites (named collections vs.
@@ -369,12 +368,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
           if (el) rowRefs.current.set(key, el);
           else rowRefs.current.delete(key);
         }}
-        style={{ background: CARD_BG, border: '1px solid ' + BORDER_LIGHT, borderRadius: 16, padding: 14 }}
+        style={{ background: SURFACE, border: '1px solid ' + BORDER, borderRadius: 16, padding: 14 }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY }}>{name}</div>
-            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: FG }}>{name}</div>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
               {rowItems.length} item{rowItems.length === 1 ? '' : 's'}
             </div>
           </div>
@@ -400,10 +399,10 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                   height: 64,
                   borderRadius: 10,
                   overflow: 'hidden',
-                  border: '1px solid ' + BORDER_LIGHT,
+                  border: '1px solid ' + BORDER,
                   padding: 0,
                   cursor: 'pointer',
-                  background: PLACEHOLDER_BG,
+                  background: SOFT,
                 }}
               >
                 {(item.stickerUrl ?? item.photos?.[0]) && (
@@ -417,7 +416,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
             ))}
           </div>
         ) : (
-          <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 10, marginBottom: 0 }}>No items yet.</p>
+          <p style={{ fontSize: 12, color: MUTED, marginTop: 10, marginBottom: 0 }}>No items yet.</p>
         )}
       </div>
     );
@@ -427,10 +426,10 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
   if (error) return <p style={{ textAlign: 'center', marginTop: 40, color: 'crimson' }}>{error}</p>;
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', background: PAGE_BG, padding: '24px 16px 40px', color: TEXT_PRIMARY }}>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', boxSizing: 'border-box', ...pageBackground, color: FG }}>
       {!selected && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ padding: '10px 18px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {photoURL && (
               <img
                 src={photoURL}
@@ -438,100 +437,24 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
               />
             )}
-            <p style={{ color: TEXT_MUTED, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}>
+            <p style={{ ...eyebrowStyle, margin: 0 }}>
               {displayName ? `${displayName}'s Memory Museum` : 'Your Memory Museum'}
             </p>
           </div>
-          <h1 style={{ fontSize: 30, lineHeight: 1.3, margin: '0 0 8px', color: TEXT_PRIMARY, fontWeight: 700, letterSpacing: -0.5 }}>
+          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 29, lineHeight: 1.04, letterSpacing: '-.035em', margin: '5px 0 0', color: FG, fontWeight: 650 }}>
             Turn your life into a museum you can collect.
           </h1>
-          <p style={{ fontSize: 14, color: TEXT_MUTED, margin: '0 0 20px' }}>
+          <p style={{ fontSize: 13, color: MUTED, margin: '7px 0 0' }}>
             Keep travel, relationships, and daily life in objects.
           </p>
-
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-            <button
-              onClick={onAddItem}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                textAlign: 'left',
-                padding: '14px 14px',
-                borderRadius: 16,
-                border: 'none',
-                background: ACCENT,
-                color: '#fff',
-                cursor: 'pointer',
-              }}
-            >
-              <span
-                style={{
-                  width: 32,
-                  height: 32,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 15,
-                }}
-              >
-                📷
-              </span>
-              <span>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>Scan a Photo</span>
-                <span style={{ display: 'block', fontSize: 11, opacity: 0.85, marginTop: 1 }}>Capture a new item</span>
-              </span>
-            </button>
-            <button
-              onClick={() => setCreatingCollection(true)}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                textAlign: 'left',
-                padding: '14px 14px',
-                borderRadius: 16,
-                border: '1px solid ' + BORDER_LIGHT,
-                background: CARD_BG,
-                color: TEXT_PRIMARY,
-                cursor: 'pointer',
-              }}
-            >
-              <span
-                style={{
-                  width: 32,
-                  height: 32,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  background: PLACEHOLDER_BG,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 16,
-                  color: ACCENT,
-                }}
-              >
-                +
-              </span>
-              <span>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>New Memory</span>
-                <span style={{ display: 'block', fontSize: 11, color: TEXT_MUTED, marginTop: 1 }}>Start a new collection</span>
-              </span>
-            </button>
-          </div>
-        </>
+        </div>
       )}
 
-      {items.length === 0 && <p style={{ color: TEXT_MUTED }}>No saved 3D models yet.</p>}
+      {items.length === 0 && <p style={{ color: MUTED, padding: '16px 18px 0' }}>No saved 3D models yet.</p>}
 
       {!selected && recentItems.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 13, color: TEXT_MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
+        <div style={{ marginTop: 16, padding: '0 18px' }}>
+          <h2 style={{ fontSize: 13, color: MUTED, fontWeight: 600, margin: '0 0 6px' }}>Recent items</h2>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
             {recentItems.map((item) => (
               <button
@@ -540,12 +463,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                 style={{
                   flexShrink: 0,
                   width: 96,
-                  border: '1px solid ' + BORDER_LIGHT,
+                  border: '1px solid ' + BORDER,
                   borderRadius: 12,
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
-                  background: CARD_BG,
+                  background: SURFACE,
                   textAlign: 'left',
                 }}
               >
@@ -556,12 +479,12 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block' }}
                   />
                 ) : (
-                  <div style={{ width: '100%', height: 72, background: PLACEHOLDER_BG }} />
+                  <div style={{ width: '100%', height: 72, background: SOFT }} />
                 )}
                 <div
                   style={{
                     fontSize: 11,
-                    color: TEXT_PRIMARY,
+                    color: FG,
                     padding: 4,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -576,10 +499,37 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
         </div>
       )}
 
+      {/* Sticky CTA + filter header (spec's .memory-sticky) — stays pinned
+          above the scrolling collection list below, matching the design
+          handoff's actual DOM structure rather than scrolling away with
+          the hero like the rest of this section used to. */}
       {!selected && items.length > 0 && (
-        <div style={{ marginTop: 20 }} ref={topRef}>
-          <h2 style={{ fontSize: 14, color: TEXT_PRIMARY, fontWeight: 700, margin: '0 0 8px' }}>Browse Memories</h2>
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, alignItems: 'center' }}>
+        <div style={stickyHeaderStyle}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
+            <button onClick={onAddItem} style={entryButtonStyle('scan')}>
+              <span style={entryIconWrapStyle('scan')}>
+                <Icon name="camera" size={20} />
+              </span>
+              <span>
+                <strong style={{ display: 'block', fontSize: 14 }}>Scan a Photo</strong>
+                <small style={{ display: 'block', marginTop: 3, fontSize: 10, lineHeight: 1.25, color: `color-mix(in oklch, ${SURFACE} 82%, transparent)` }}>
+                  Capture a new item
+                </small>
+              </span>
+            </button>
+            <button onClick={() => setCreatingCollection(true)} style={entryButtonStyle('create')}>
+              <span style={entryIconWrapStyle('create')}>
+                <Icon name="plus" size={20} />
+              </span>
+              <span>
+                <strong style={{ display: 'block', fontSize: 14 }}>New Memory</strong>
+                <small style={{ display: 'block', marginTop: 3, fontSize: 10, lineHeight: 1.25, color: MUTED }}>Start a new collection</small>
+              </span>
+            </button>
+          </div>
+
+          <p style={galleryLabelStyle}>Browse Memories</p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 9, overflowX: 'auto', paddingBottom: 3, alignItems: 'center' }}>
             <button onClick={() => scrollToRow('top')} style={chipStyle(true)}>
               All Items
             </button>
@@ -605,7 +555,7 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                     }
                   }}
                   placeholder="Collection name"
-                  style={{ fontSize: 12, padding: '4px 8px', width: 120, borderRadius: 6, border: '1px solid ' + BORDER_LIGHT }}
+                  style={{ fontSize: 12, padding: '4px 8px', width: 120, borderRadius: 6, border: '1px solid ' + BORDER }}
                   disabled={savingCollection}
                 />
                 <button onClick={handleCreateCollection} disabled={savingCollection || !newCollectionName.trim()} style={{ fontSize: 12 }}>
@@ -630,9 +580,9 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
                   fontSize: 12,
                   padding: '6px 12px',
                   borderRadius: 999,
-                  border: '1px dashed ' + BORDER_LIGHT,
+                  border: '1px dashed ' + BORDER,
                   background: 'none',
-                  color: TEXT_MUTED,
+                  color: MUTED,
                   cursor: 'pointer',
                 }}
               >
@@ -645,140 +595,200 @@ export default function HomePage({ user, onAddItem }: { user: User; onAddItem?: 
       )}
 
       {selected ? (
-        <div>
-          <button onClick={() => selectItem(null)} style={{ marginBottom: 12 }}>
-            ← Back to list
-          </button>
-
-          {editing ? (
-            <div style={{ marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Edit item details</h2>
-              <ItemMetadataForm value={editValue} onChange={setEditValue} />
-              {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button onClick={handleSaveEdit} disabled={savingEdit}>
-                  {savingEdit ? 'Saving…' : 'Save changes'}
-                </button>
-                <button onClick={() => setEditing(false)} disabled={savingEdit}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <h2 style={{ fontSize: 18, margin: 0 }}>{selected.name || 'Untitled item'}</h2>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button onClick={startEdit} disabled={deleting}>
-                    Edit
-                  </button>
-                  {selected.photos?.[0] && (
-                    <button onClick={handleGenerateSticker} disabled={generatingSticker || deleting}>
-                      {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
-                    </button>
-                  )}
-                  <button onClick={handleAddToMoodboard} disabled={addingToMoodboard || deleting}>
-                    {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Moodboard'}
-                  </button>
-                  <button onClick={handleDelete} disabled={deleting} style={{ color: '#e05555' }}>
-                    {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
-              </div>
-              {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{deleteError}</p>}
-              {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{stickerError}</p>}
-              {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{moodboardError}</p>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#888' }}>
-                <label htmlFor="collection-select">Collection:</label>
-                <select
-                  id="collection-select"
-                  value={selected.collectionId ?? ''}
-                  onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
-                  disabled={movingItem}
-                  style={{ fontSize: 12 }}
-                >
-                  <option value="">Uncategorized</option>
-                  {collections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                {movingItem && <span>Moving…</span>}
-              </div>
-              {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{collectionsError}</p>}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 12, color: '#888' }}>
-                {selected.type && (
-                  <span style={{ border: '1px solid #555', borderRadius: 999, padding: '2px 8px' }}>{selected.type}</span>
-                )}
-                {selected.location && <span>📍 {selected.location}</span>}
-                {selected.date && <span>📅 {selected.date}</span>}
-              </div>
-              {selected.emotionTags && selected.emotionTags.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                  {selected.emotionTags.map((tag) => (
-                    <span
-                      key={tag}
-                      style={{
-                        fontSize: 12,
-                        color: '#6ea8ff',
-                        border: '1px solid #6ea8ff',
-                        borderRadius: 999,
-                        padding: '2px 10px',
-                        background: 'rgba(110, 168, 255, 0.15)',
-                      }}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {selected.story && <p style={{ marginTop: 8, fontSize: 13, color: '#aaa' }}>{selected.story}</p>}
-            </div>
-          )}
-
-          {selected.photos && selected.photos.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <h2 style={{ fontSize: 14, marginBottom: 6 }}>Original photos</h2>
-              <PhotoGallery photos={selected.photos} />
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12, color: '#888' }}>
-            <label style={{ cursor: savingBackgroundImage ? 'default' : 'pointer' }}>
-              {savingBackgroundImage
-                ? 'Saving…'
-                : selected.backgroundImageUrl
-                  ? 'Change background image'
-                  : 'Upload background image'}
-              <input
-                type="file"
-                accept="image/*"
-                disabled={savingBackgroundImage}
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  handleBackgroundImageChange(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-            {selected.backgroundImageUrl && (
-              <button onClick={handleRemoveBackgroundImage} disabled={savingBackgroundImage} style={{ fontSize: 12 }}>
-                Remove image
-              </button>
-            )}
+        <div style={{ padding: '16px 18px 40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <button
+              onClick={() => selectItem(null)}
+              aria-label="Back"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: SURFACE,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                cursor: 'pointer',
+                fontSize: 18,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              ‹
+            </button>
+            <h1 style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700, margin: 0, marginRight: 36 }}>Item Details</h1>
           </div>
-          {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginBottom: 8 }}>{backgroundImageError}</p>}
 
           <ModelViewer
             url={modelProxyUrl(selected.modelUrl)}
             fallbackMessage="This 3D model is no longer available. Please retake photos and regenerate."
             backgroundImageUrl={selected.backgroundImageUrl}
+            height={320}
           />
+
+          <div
+            style={{
+              background: SURFACE,
+              borderRadius: 20,
+              marginTop: -20,
+              position: 'relative',
+              padding: '20px 16px 24px',
+            }}
+          >
+            {editing ? (
+              <div>
+                <h2 style={{ fontSize: 16, marginBottom: 8, color: FG }}>Edit item details</h2>
+                <ItemMetadataForm value={editValue} onChange={setEditValue} />
+                {editError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 8 }}>{editError}</p>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={handleSaveEdit} disabled={savingEdit} style={actionButtonStyle('primary', savingEdit)}>
+                    {savingEdit ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button onClick={() => setEditing(false)} disabled={savingEdit} style={actionButtonStyle('secondary', savingEdit)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: MUTED }}>
+                  {[selected.type, selected.location, selected.date].filter(Boolean).join(' · ')}
+                </div>
+                <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 650, margin: '4px 0 8px', color: FG }}>
+                  {selected.name || 'Untitled item'}
+                </h2>
+                {selected.story && <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', lineHeight: 1.5 }}>{selected.story}</p>}
+
+                {selected.emotionTags && selected.emotionTags.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                    {selected.emotionTags.map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontSize: 12,
+                          color: ACCENT,
+                          border: '1px solid ' + ACCENT,
+                          borderRadius: 999,
+                          padding: '2px 10px',
+                          background: SOFT,
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Matches the mockup's "Stored in <Collection>" card — repurposed
+                    to also be the collection-reassignment control (a plain <select>
+                    styled to sit inside the card) rather than a second, separate
+                    control elsewhere on the page. */}
+                <div style={{ border: '1px solid ' + BORDER, borderRadius: 14, padding: 12, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: FG, marginBottom: 2 }}>
+                    Stored in {selected.collectionId ? collections.find((c) => c.id === selected.collectionId)?.name ?? 'Uncategorized' : 'Uncategorized'}
+                  </div>
+                  <div style={{ fontSize: 12, color: MUTED, marginBottom: 8 }}>
+                    Kept together with the other items, photos, and stories in this memory.
+                  </div>
+                  <select
+                    id="collection-select"
+                    value={selected.collectionId ?? ''}
+                    onChange={(e) => handleMoveSelectedItemToCollection(e.target.value || null)}
+                    disabled={movingItem}
+                    style={{ fontSize: 12, borderRadius: 6, border: '1px solid ' + BORDER, padding: '3px 6px' }}
+                  >
+                    <option value="">Uncategorized</option>
+                    {collections.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {movingItem && <span style={{ fontSize: 12, color: MUTED, marginLeft: 6 }}>Moving…</span>}
+                </div>
+                {collectionsError && <p style={{ color: 'crimson', fontSize: 12, marginTop: -12, marginBottom: 12 }}>{collectionsError}</p>}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <button onClick={startEdit} disabled={deleting} style={actionButtonStyle('secondary', deleting)}>
+                    Edit
+                  </button>
+                  {selected.photos?.[0] && (
+                    <button
+                      onClick={handleGenerateSticker}
+                      disabled={generatingSticker || deleting}
+                      style={actionButtonStyle('secondary', generatingSticker || deleting)}
+                    >
+                      {generatingSticker ? 'Generating…' : selected.stickerUrl ? 'Regenerate AI Sticker' : 'Generate AI Sticker'}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleAddToMoodboard}
+                    disabled={addingToMoodboard || deleting}
+                    style={actionButtonStyle('secondary', addingToMoodboard || deleting)}
+                  >
+                    {addingToMoodboard ? 'Adding…' : addedToMoodboard ? 'Added ✓' : 'Add to Moodboard'}
+                  </button>
+                  <button onClick={handleDelete} disabled={deleting} style={actionButtonStyle('danger', deleting)}>
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+                {deleteError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{deleteError}</p>}
+                {stickerError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{stickerError}</p>}
+                {moodboardError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{moodboardError}</p>}
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, fontSize: 12 }}>
+              <label
+                style={{
+                  cursor: savingBackgroundImage ? 'default' : 'pointer',
+                  color: MUTED,
+                  textDecoration: 'underline',
+                  opacity: savingBackgroundImage ? 0.5 : 1,
+                }}
+              >
+                {savingBackgroundImage
+                  ? 'Saving…'
+                  : selected.backgroundImageUrl
+                    ? 'Change background image'
+                    : 'Upload background image'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={savingBackgroundImage}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    handleBackgroundImageChange(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {selected.backgroundImageUrl && (
+                <button
+                  onClick={handleRemoveBackgroundImage}
+                  disabled={savingBackgroundImage}
+                  style={{
+                    fontSize: 12,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: MUTED,
+                    textDecoration: 'underline',
+                    cursor: savingBackgroundImage ? 'default' : 'pointer',
+                    opacity: savingBackgroundImage ? 0.5 : 1,
+                  }}
+                >
+                  Remove image
+                </button>
+              )}
+            </div>
+            {backgroundImageError && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{backgroundImageError}</p>}
+          </div>
         </div>
       ) : (
         items.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div ref={topRef} style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px 18px 40px' }}>
             {collections.map((c) => renderCollectionRow(c.id, c.name, itemsByCollection.get(c.id) ?? [], () => handleDeleteCollection(c)))}
             {uncategorizedItems.length > 0 && renderCollectionRow(UNCATEGORIZED, 'Uncategorized', uncategorizedItems)}
           </div>
