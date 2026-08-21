@@ -72,8 +72,9 @@ async function normalizeForTripo(buffer) {
     .toBuffer();
 }
 
-// Reference image sent to gpt-image-2's images/edits endpoint for AI sticker
-// generation. Kept smaller than the Tripo reference (1024 vs 2048) since
+// Reference image sent to gpt-image-1's images/edits endpoint for the
+// background-removal cutout. Kept smaller than the Tripo reference (1024 vs
+// 2048) since
 // OpenAI bills input images by token count regardless of resolution — there's
 // no quality benefit to sending a larger image, just extra cost.
 async function normalizeForSticker(buffer) {
@@ -240,11 +241,11 @@ app.get('/api/model', async (req, res) => {
   }
 });
 
-// Generates a stylized "AI sticker" illustration of an item from its
-// reference photo, using OpenAI's gpt-image-2 image-to-image endpoint
-// (images/edits). This is a best-effort enhancement on the client side — if
-// this route fails, the client falls back to the real photo thumbnail rather
-// than blocking the save/edit flow.
+// Generates a background-removed "cutout" of an item from its reference
+// photo, using OpenAI's gpt-image-1 image-to-image endpoint (images/edits)
+// with background=transparent. This is a best-effort enhancement on the
+// client side — if this route fails, the client falls back to the real photo
+// thumbnail rather than blocking the save/edit flow.
 //
 // Accepts either an uploaded file (new item, saved at the same time as the
 // rest of the item) or a photoUrl (regenerating a sticker for an existing
@@ -279,14 +280,14 @@ app.post('/api/sticker', upload.single('photo'), async (req, res) => {
 
     const jpegBuffer = await normalizeForSticker(sourceBuffer);
 
-    const prompt = `Turn this photographed travel souvenir into a flat-vector sticker illustration: thick white die-cut border, solid pastel background, vibrant flat colors, single centered object, simple clean shading, no text or watermarks. Item: "${name || ''}" (${type || ''}).`;
+    const prompt = `Remove the background from this photo of a travel keepsake. Keep the object itself exactly as photographed — same shape, colors, proportions, and lighting, no restyling. Output only the isolated object on a fully transparent background: photorealistic, not an illustration or vector drawing. The cutout edge must follow the object's own real silhouette exactly, pixel-accurate — do not add any border, outline, stroke, halo, glow, rim light, or drop shadow around the edge, and do not leave a soft white/light fringe from the original background. No added background color, no text or watermarks. Item: "${name || ''}" (${type || ''}).`;
 
     const form = new FormData();
-    form.append('model', 'gpt-image-2');
+    form.append('model', 'gpt-image-1');
     form.append('image[]', jpegBuffer, { filename: 'reference.jpg', contentType: 'image/jpeg' });
     form.append('prompt', prompt);
     form.append('size', '1024x1024');
-    form.append('background', 'opaque');
+    form.append('background', 'transparent');
     form.append('output_format', 'png');
     form.append('n', '1');
 
@@ -321,10 +322,10 @@ app.post('/api/sticker', upload.single('photo'), async (req, res) => {
 // Best-effort auto-classification of an item's Type field (PRD 4.3 Add Item
 // Screen), run automatically as soon as the user picks the "front" photo in
 // UploadPage.tsx. Uses a vision-capable chat model (cheaper/faster than
-// gpt-image-2, and this only needs a short text label back, not an image) to
+// gpt-image-1, and this only needs a short text label back, not an image) to
 // suggest a short category label from the photo. The client only prefills
 // the Type field with this — it's always still a plain editable text input,
-// never authoritative, matching every other AI feature in this app (sticker
+// never authoritative, matching every other AI feature in this app (cutout
 // generation, background removal) being a fallback-safe enhancement rather
 // than a blocking step.
 app.post('/api/classify-item', upload.single('photo'), async (req, res) => {
